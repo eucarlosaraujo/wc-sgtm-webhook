@@ -14,6 +14,34 @@ if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly
 }
 
+// Helper para ler configurações do plugin com fallback para constantes
+function wc_sgtm_get_setting($key, $default = null) {
+    if (function_exists('wc_sgtm_webhook_pro')) {
+        $plugin = wc_sgtm_webhook_pro();
+        if ($plugin && method_exists($plugin, 'get_setting')) {
+            $val = $plugin->get_setting($key, null);
+            if ($val !== null) {
+                return $val;
+            }
+        }
+    }
+    // Fallback para constantes antigas
+    switch ($key) {
+        case 'webhook_enabled':
+            return defined('SGTM_WEBHOOK_ENABLED') ? SGTM_WEBHOOK_ENABLED : ($default ?? false);
+        case 'webhook_url':
+            return defined('SGTM_WEBHOOK_URL') ? SGTM_WEBHOOK_URL : ($default ?? '');
+        case 'debug_mode':
+            return defined('SGTM_DEBUG_MODE') ? SGTM_DEBUG_MODE : ($default ?? false);
+        case 'timeout':
+            return $default ?? 30;
+        case 'validate_ssl':
+            return $default ?? true;
+        default:
+            return $default;
+    }
+}
+
 // O código abaixo é a migração literal dos snippets para o plugin.
 
 /**
@@ -23,10 +51,11 @@ if (!defined('ABSPATH')) {
  */
 function wc_sgtm_enviar_webhook_pedido_pago($order_id) {
 
-    if (!defined('SGTM_WEBHOOK_ENABLED') || !SGTM_WEBHOOK_ENABLED) {
-        wc_sgtm_log_debug('Webhook desabilitado via configuração');
-        return;
-    }
+    $enabled = (bool) wc_sgtm_get_setting('webhook_enabled', false);
+    if (!$enabled) {
+        wc_sgtm_log_debug('Webhook desabilitado via configuração');
+        return;
+    }
 
     try {
         $order = wc_get_order($order_id);
@@ -296,30 +325,31 @@ function wc_sgtm_get_product_brand($product) {
  */
 function wc_sgtm_enviar_dados($data) {
 
-    if (!defined('SGTM_WEBHOOK_URL')) {
-        wc_sgtm_log_debug('SGTM_WEBHOOK_URL não definida.');
-        return new WP_Error('no_url', 'SGTM_WEBHOOK_URL não definida.');
+    $url = wc_sgtm_get_setting('webhook_url', '');
+    if (empty($url)) {
+        wc_sgtm_log_debug('Webhook URL não configurada.');
+        return new WP_Error('no_url', 'Webhook URL não configurada.');
     }
-    
-    $args = array(
-        'body' => json_encode($data, JSON_UNESCAPED_UNICODE),
-        'headers' => array(
-            'Content-Type' => 'application/json; charset=utf-8',
-            'User-Agent' => 'WooCommerce-SGTM-Webhook/1.0',
-            'Accept' => 'application/json'
-        ),
-        'timeout' => 30,
-        'httpversion' => '1.1',
-        'sslverify' => true,
-        'blocking' => true
-    );
 
-    if (defined('SGTM_DEBUG_MODE') && SGTM_DEBUG_MODE) {
-        wc_sgtm_log_debug('Enviando POST para: ' . SGTM_WEBHOOK_URL);
-        wc_sgtm_log_debug('Tamanho dos dados: ' . strlen($args['body']) . ' bytes');
-    }
+    $args = array(
+        'body' => json_encode($data, JSON_UNESCAPED_UNICODE),
+        'headers' => array(
+            'Content-Type' => 'application/json; charset=utf-8',
+            'User-Agent' => 'WooCommerce-SGTM-Webhook/' . (defined('WC_SGTM_WEBHOOK_VERSION') ? WC_SGTM_WEBHOOK_VERSION : '1.x'),
+            'Accept' => 'application/json'
+        ),
+        'timeout' => (int) wc_sgtm_get_setting('timeout', 30),
+        'httpversion' => '1.1',
+        'sslverify' => (bool) wc_sgtm_get_setting('validate_ssl', true),
+        'blocking' => true
+    );
 
-    return wp_remote_post(SGTM_WEBHOOK_URL, $args);
+    if (wc_sgtm_get_setting('debug_mode', false)) {
+        wc_sgtm_log_debug('Enviando POST para: ' . $url);
+        wc_sgtm_log_debug('Tamanho dos dados: ' . strlen($args['body']) . ' bytes');
+    }
+
+    return wp_remote_post($url, $args);
 }
 
 /**

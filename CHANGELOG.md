@@ -5,12 +5,32 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
-## [1.0.0] - 2024-01-XX
+## [1.2.0] - 2025-10-26
+- Corrige Erro Fatal na ativação: garante `logger` antes do `Installer`.
+- Installer agora é resiliente: cria `WC_SGTM_Logger` se `plugin->get_logger()` for nulo.
+- Protege chamadas `->info()` com checagem de `logger` para evitar `null`.
+- Refatora `includes/helpers.php`:
+  - Usa `wc_sgtm_get_setting()` para ler configurações do plugin com fallback às constantes.
+  - Centraliza `webhook_url`, `webhook_enabled`, `timeout`, `validate_ssl` e `debug_mode`.
+- Ajusta envio HTTP para respeitar configurações do painel (timeout/SSL/UA).
+- Atualiza `.gitignore` para ignorar `assets/**/*.map`, `*.min.*`, `languages/*.mo`, cobertura e cache de testes.
+- Documentação reforçada: README, CONTRIBUTING, SECURITY.
 
-### Adicionado
-- Integração inicial com Server-Side Google Tag Manager
-- Dashboard administrativo completo
-- Sistema de configurações avançadas
+## [1.1.0] - 2025-10-25
+- Corrige paths de assets admin para `assets/admin.js` e `assets/admin.css`.
+- Unifica estatísticas do dashboard via `Statistics_Manager`.
+- Remove método duplicado `get_enhanced_statistics()` no Admin.
+- Elimina blocos residuais de SQL no arquivo principal (migração para Installer).
+- Remove arquivo duplicado `includes/class-statistics-manager.php`.
+- Ajusta construtores:
+  - `WC_SGTM_Browser_Capture`, `WC_SGTM_Webhook_Sender`, `WC_SGTM_Admin_Panel` recebem `settings` e `logger`.
+  - Admin passa instância do plugin no construtor.
+
+## [1.0.0] - 2025-10-24
+- Lançamento inicial do plugin.
+- Integração com SGTM server-side via webhooks.
+- Painel administrativo com estatísticas e logs.
+- Configurações avançadas de timeout, SSL e debug.
 - Rastreamento de eventos de e-commerce em tempo real
 - Sistema de logs e depuração
 - Estatísticas detalhadas de performance

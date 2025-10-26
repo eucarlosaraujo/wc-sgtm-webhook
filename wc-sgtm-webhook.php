@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce SGTM Webhook
  * Plugin URI: https://wordpress.org/plugins/wc-sgtm-webhook/
  * Description: Integração profissional do WooCommerce com Server-Side Google Tag Manager via webhooks para rastreamento avançado de e-commerce.
- * Version: 1.2.0
+ * Version: 1.2.1
  * Author: Seu Nome
  * Author URI: https://profiles.wordpress.org/seuusuario/
  * License: GPL v2 or later
