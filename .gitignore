@@ -29,9 +29,9 @@ build/
 .env.*
 !.env.example
 
-# Arquivos de cache e logs
-*.log
-*.cache
+# Mapas de fonte e minificados (assets)
+assets/**/*.map
+assets/**/*.min.*
 
 # Arquivos temporários
 tmp/
@@ -52,3 +52,13 @@ temp/
 wp-config.php
 /wp-content/uploads/
 /.htaccess
+
+# Traduções (manter .po, ignorar binários .mo)
+languages/*.mo
+
+# Cobertura e relatórios de testes
+coverage/
+reports/
+.phpunit.result.cache
+*.log
+*.cache
