@@ -180,643 +180,648 @@ class WC_SGTM_Admin_Panel {
     /**
      * Salvar configurações
      */
-    private function save_settings() {
-        $new_settings = array();
+    class WC_SGTM_Webhook_Admin {
+        public function save_settings() {
+            // Apenas administradores e com nonce válido
+            if (!is_user_logged_in() || !current_user_can('manage_options')) {
+                wp_send_json_error(array('message' => 'Permissão negada.'), 403);
+            }
+            if (!isset($_POST['wc_sgtm_settings_nonce']) || !wp_verify_nonce($_POST['wc_sgtm_settings_nonce'], 'wc_sgtm_save_settings')) {
+                wp_send_json_error(array('message' => 'Falha na verificação de segurança.'), 403);
+            }
         
-        // Configurações básicas
-        $new_settings['webhook_url'] = sanitize_url($_POST['webhook_url'] ?? '');
-        $new_settings['webhook_enabled'] = isset($_POST['webhook_enabled']);
-        $new_settings['debug_mode'] = isset($_POST['debug_mode']);
-        $new_settings['browser_capture_enabled'] = isset($_POST['browser_capture_enabled']);
+            $errors = array();
         
-        // Configurações avançadas
-        $new_settings['data_retention_days'] = intval($_POST['data_retention_days'] ?? 30);
-        $new_settings['timeout'] = intval($_POST['timeout'] ?? 30);
-        $new_settings['retry_attempts'] = intval($_POST['retry_attempts'] ?? 3);
-        $new_settings['validate_ssl'] = isset($_POST['validate_ssl']);
+            // URL do webhook
+            $webhook_url_raw = isset($_POST['webhook_url']) ? trim((string) $_POST['webhook_url']) : '';
+            $webhook_url = esc_url_raw($webhook_url_raw);
+            if (empty($webhook_url) || !filter_var($webhook_url, FILTER_VALIDATE_URL)) {
+                $errors[] = 'URL do webhook inválida.';
+            }
         
-        // Configurações de tracking
-        $new_settings['pixel_tracking'] = array(
-            'facebook' => isset($_POST['pixel_tracking_facebook']),
-            'google_ads' => isset($_POST['pixel_tracking_google_ads']),
-            'utm_params' => isset($_POST['pixel_tracking_utm'])
-        );
+            // Dias de retenção (logs)
+            $retention_days = isset($_POST['retention_days']) ? absint($_POST['retention_days']) : 30;
+            $retention_days = max(1, min(3650, $retention_days));
         
-        // Configurações de privacidade
-        $new_settings['privacy'] = array(
-            'hash_pii' => isset($_POST['privacy_hash_pii']),
-            'respect_consent' => isset($_POST['privacy_respect_consent']),
-            'anonymize_ip' => isset($_POST['privacy_anonymize_ip'])
-        );
+            // Timeout
+            $timeout = isset($_POST['timeout']) ? absint($_POST['timeout']) : 10;
+            $timeout = max(5, min(60, $timeout));
         
-        // Atualizar configurações
-        $this->plugin->update_settings($new_settings);
+            // Tentativas
+            $retry_attempts = isset($_POST['retry_attempts']) ? absint($_POST['retry_attempts']) : 3;
+            $retry_attempts = max(0, min(10, $retry_attempts));
         
-        // Log da atualização
-        $this->logger->info('Configurações atualizadas via admin', array(
-            'user_id' => get_current_user_id(),
-            'changes' => array_keys($new_settings)
-        ));
+            // Token e Client ID
+            $auth_token = isset($_POST['sgtm_auth_token']) ? sanitize_text_field($_POST['sgtm_auth_token']) : '';
+            $client_id  = isset($_POST['client_id']) ? sanitize_text_field($_POST['client_id']) : '';
         
-        add_settings_error('wc_sgtm_admin', 'settings_saved', 
-            __('Configurações salvas com sucesso!', 'wc-sgtm-webhook'), 'success');
-    }
+            if (!empty($errors)) {
+                wp_send_json_error(array('message' => implode(' ', $errors)), 400);
+            }
+        
+            // Persistência
+            WC_SGTM_Webhook::update_setting('webhook_url', $webhook_url);
+            WC_SGTM_Webhook::update_setting('retention_days', $retention_days);
+            WC_SGTM_Webhook::update_setting('timeout', $timeout);
+            WC_SGTM_Webhook::update_setting('retry_attempts', $retry_attempts);
+            WC_SGTM_Webhook::update_setting('sgtm_auth_token', $auth_token);
+            WC_SGTM_Webhook::update_setting('client_id', $client_id);
+        
+            wp_send_json_success(array('message' => 'Configurações salvas com sucesso.'));
+        }
     
-    /**
-     * AJAX: Testar webhook
-     */
-    public function ajax_test_webhook() {
-        if (
-            !isset($_POST['nonce']) ||
-            !wp_verify_nonce($_POST['nonce'], 'wc_sgtm_admin') ||
-            !current_user_can('manage_woocommerce')
-        ) {
-            wp_send_json_error(array('message' => 'Acesso negado'), 403);
-        }
-        
-        $webhook_sender = $this->plugin->get_webhook_sender();
-        
-        if (!$webhook_sender) {
-            wp_send_json_error(array(
-                'message' => 'Webhook sender não disponível'
-            ), 500);
-        }
-        
-        // Dados de teste
-        $test_data = array(
-            'client_name' => 'Data Client',
-            'event_name' => 'purchase',
-            'event_time' => time(),
-            'event_id' => 'test_' . time(),
-            'action_source' => 'website',
-            'event_source_url' => get_home_url(),
-            'user_data' => array(
-                'em' => array(hash('sha256', 'test@example.com')),
-                'fn' => array(hash('sha256', 'test')),
-                'ln' => array(hash('sha256', 'user'))
-            ),
-            'custom_data' => array(
-                'currency' => get_woocommerce_currency(),
-                'value' => 99.99,
-                'order_id' => 'test_order_' . time(),
-                'content_type' => 'product'
-            ),
-            'metadata' => array(
-                'source' => 'admin_test',
-                'version' => WC_SGTM_WEBHOOK_VERSION,
-                'test_mode' => true,
-                'timestamp' => current_time('mysql')
-            )
-        );
-        
-        try {
-            $response = $webhook_sender->send_webhook($test_data);
-            if ($response['success']) {
-                wp_send_json_success(array(
-                    'message' => 'Teste enviado com sucesso!',
-                    'response_code' => $response['response_code'],
-                    'data' => $test_data
-                ));
-            } else {
+        public function ajax_test_webhook() {
+            if (
+                !isset($_POST['nonce']) ||
+                !wp_verify_nonce($_POST['nonce'], 'wc_sgtm_admin') ||
+                !current_user_can('manage_woocommerce')
+            ) {
+                wp_send_json_error(array('message' => 'Acesso negado'), 403);
+            }
+            
+            $webhook_sender = $this->plugin->get_webhook_sender();
+            
+            if (!$webhook_sender) {
                 wp_send_json_error(array(
-                    'message' => $response['error'],
-                    'response_code' => $response['response_code'] ?? 0
+                    'message' => 'Webhook sender não disponível'
                 ), 500);
             }
-        } catch (Exception $e) {
-            $this->logger->error('Erro no teste de webhook via admin', array(
-                'error' => $e->getMessage(),
-                'user_id' => get_current_user_id()
-            ));
-            wp_send_json_error(array(
-                'message' => 'Erro interno: ' . $e->getMessage()
-            ), 500);
+            
+            // Dados de teste
+            $test_data = array(
+                'client_name' => 'Data Client',
+                'event_name' => 'purchase',
+                'event_time' => time(),
+                'event_id' => 'test_' . time(),
+                'action_source' => 'website',
+                'event_source_url' => get_home_url(),
+                'user_data' => array(
+                    'em' => array(hash('sha256', 'test@example.com')),
+                    'fn' => array(hash('sha256', 'test')),
+                    'ln' => array(hash('sha256', 'user'))
+                ),
+                'custom_data' => array(
+                    'currency' => get_woocommerce_currency(),
+                    'value' => 99.99,
+                    'order_id' => 'test_order_' . time(),
+                    'content_type' => 'product'
+                ),
+                'metadata' => array(
+                    'source' => 'admin_test',
+                    'version' => WC_SGTM_WEBHOOK_VERSION,
+                    'test_mode' => true,
+                    'timestamp' => current_time('mysql')
+                )
+            );
+            
+            try {
+                $response = $webhook_sender->send_webhook($test_data);
+                if ($response['success']) {
+                    wp_send_json_success(array(
+                        'message' => 'Teste enviado com sucesso!',
+                        'response_code' => $response['response_code'],
+                        'data' => $test_data
+                    ));
+                } else {
+                    wp_send_json_error(array(
+                        'message' => $response['error'],
+                        'response_code' => $response['response_code'] ?? 0
+                    ), 500);
+                }
+            } catch (Exception $e) {
+                $this->logger->error('Erro no teste de webhook via admin', array(
+                    'error' => $e->getMessage(),
+                    'user_id' => get_current_user_id()
+                ));
+                wp_send_json_error(array(
+                    'message' => 'Erro interno: ' . $e->getMessage()
+                ), 500);
+            }
         }
-    }
-    
-    /**
-     * AJAX: Obter estatísticas
-     */
-    public function ajax_get_stats() {
-        if (!current_user_can('manage_woocommerce')) {
-            wp_die('Acesso negado');
+        
+        /**
+         * AJAX: Obter estatísticas
+         */
+        public function ajax_get_stats() {
+            if (!current_user_can('manage_woocommerce')) {
+                wp_die('Acesso negado');
+            }
+            
+            $stats = $this->plugin->get_statistics_manager()->get_enhanced_statistics();
+            $browser_stats = $this->plugin->get_browser_capture()->get_capture_statistics();
+            
+            wp_die(json_encode(array(
+                'success' => true,
+                'stats' => $stats,
+                'browser_stats' => $browser_stats,
+                'timestamp' => current_time('mysql')
+            )));
         }
         
-        $stats = $this->plugin->get_statistics_manager()->get_enhanced_statistics();
-        $browser_stats = $this->plugin->get_browser_capture()->get_capture_statistics();
-        
-        wp_die(json_encode(array(
-            'success' => true,
-            'stats' => $stats,
-            'browser_stats' => $browser_stats,
-            'timestamp' => current_time('mysql')
-        )));
-    }
-    
-    /**
-     * AJAX: Exportar logs
-     */
-    public function ajax_export_logs() {
-        if (
-            !isset($_POST['nonce']) ||
-            !wp_verify_nonce($_POST['nonce'], 'wc_sgtm_admin') ||
-            !current_user_can('manage_woocommerce')
-        ) {
-            wp_send_json_error(array('message' => 'Acesso negado'), 403);
+        /**
+         * AJAX: Exportar logs
+         */
+        public function ajax_export_logs() {
+            if (
+                !isset($_POST['nonce']) ||
+                !wp_verify_nonce($_POST['nonce'], 'wc_sgtm_admin') ||
+                !current_user_can('manage_woocommerce')
+            ) {
+                wp_send_json_error(array('message' => 'Acesso negado'), 403);
+            }
+            
+            $logs = $this->get_recent_logs(1000);
+            $filename = 'wc-sgtm-logs-' . date('Y-m-d-H-i-s') . '.json';
+            
+            $export_data = array(
+                'plugin_version' => WC_SGTM_WEBHOOK_VERSION,
+                'export_date' => current_time('mysql'),
+                'site_url' => get_site_url(),
+                'settings' => $this->plugin->get_settings(),
+                'logs' => $logs
+            );
+            
+            header('Content-Type: application/json');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            header('Content-Length: ' . strlen(json_encode($export_data)));
+            
+            echo json_encode($export_data, JSON_PRETTY_PRINT);
+            exit;
         }
         
-        $logs = $this->get_recent_logs(1000);
-        $filename = 'wc-sgtm-logs-' . date('Y-m-d-H-i-s') . '.json';
-        
-        $export_data = array(
-            'plugin_version' => WC_SGTM_WEBHOOK_VERSION,
-            'export_date' => current_time('mysql'),
-            'site_url' => get_site_url(),
-            'settings' => $this->plugin->get_settings(),
-            'logs' => $logs
-        );
-        
-        header('Content-Type: application/json');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Content-Length: ' . strlen(json_encode($export_data)));
-        
-        echo json_encode($export_data, JSON_PRETTY_PRINT);
-        exit;
-    }
-    
-    /**
-     * Adicionar metabox no pedido
-     */
-    public function add_order_metabox() {
-        add_meta_box(
-            'wc_sgtm_webhook_status',
-            __('🚀 SGTM Webhook Status', 'wc-sgtm-webhook'),
-            array($this, 'render_order_metabox'),
-            'shop_order',
-            'side',
-            'default'
-        );
-        
-        // Compatibilidade com HPOS
-        if (class_exists('\Automattic\WooCommerce\Admin\Overrides\Order')) {
+        /**
+         * Adicionar metabox no pedido
+         */
+        public function add_order_metabox() {
             add_meta_box(
                 'wc_sgtm_webhook_status',
                 __('🚀 SGTM Webhook Status', 'wc-sgtm-webhook'),
                 array($this, 'render_order_metabox'),
-                'woocommerce_page_wc-orders',
+                'shop_order',
                 'side',
                 'default'
             );
-        }
-    }
-    
-    /**
-     * Renderizar metabox do pedido
-     */
-    public function render_order_metabox($post_or_order) {
-        $order_id = is_object($post_or_order) ? $post_or_order->get_id() : $post_or_order->ID;
-        $order = wc_get_order($order_id);
-        
-        if (!$order) {
-            echo '<p>' . __('Pedido não encontrado.', 'wc-sgtm-webhook') . '</p>';
-            return;
-        }
-        
-        // Status do webhook
-        $webhook_sent = $order->get_meta('_sgtm_webhook_sent');
-        $webhook_error = $order->get_meta('_sgtm_webhook_error');
-        $webhook_response = $order->get_meta('_sgtm_webhook_response');
-        
-        // Dados do navegador
-        $browser_data = $order->get_meta('_browser_data');
-        
-        include WC_SGTM_WEBHOOK_PLUGIN_PATH . 'templates/admin/order-metabox.php';
-    }
-    
-    /**
-     * Adicionar widget ao dashboard
-     */
-    public function add_dashboard_widget() {
-        if (!current_user_can('manage_woocommerce')) {
-            return;
+            
+            // Compatibilidade com HPOS
+            if (class_exists('\Automattic\WooCommerce\Admin\Overrides\Order')) {
+                add_meta_box(
+                    'wc_sgtm_webhook_status',
+                    __('🚀 SGTM Webhook Status', 'wc-sgtm-webhook'),
+                    array($this, 'render_order_metabox'),
+                    'woocommerce_page_wc-orders',
+                    'side',
+                    'default'
+                );
+            }
         }
         
-        wp_add_dashboard_widget(
-            'wc_sgtm_dashboard_widget',
-            __('🚀 SGTM Webhook Status', 'wc-sgtm-webhook'),
-            array($this, 'render_dashboard_widget')
-        );
-    }
-    
-    /**
-     * Renderizar widget do dashboard
-     */
-    public function render_dashboard_widget() {
-        $stats = $this->get_enhanced_statistics();
-        $webhook_enabled = $this->plugin->get_setting('webhook_enabled', false);
-        
-        include WC_SGTM_WEBHOOK_PLUGIN_PATH . 'templates/admin/dashboard-widget.php';
-    }
-    
-    /**
-     * Mostrar notificações do admin
-     */
-    public function show_admin_notices() {
-        $screen = get_current_screen();
-        
-        // Só mostrar em páginas relevantes
-        if (!$screen || (strpos($screen->id, 'woocommerce') === false && strpos($screen->id, 'sgtm') === false)) {
-            return;
+        /**
+         * Renderizar metabox do pedido
+         */
+        public function render_order_metabox($post_or_order) {
+            $order_id = is_object($post_or_order) ? $post_or_order->get_id() : $post_or_order->ID;
+            $order = wc_get_order($order_id);
+            
+            if (!$order) {
+                echo '<p>' . __('Pedido não encontrado.', 'wc-sgtm-webhook') . '</p>';
+                return;
+            }
+            
+            // Status do webhook
+            $webhook_sent = $order->get_meta('_sgtm_webhook_sent');
+            $webhook_error = $order->get_meta('_sgtm_webhook_error');
+            $webhook_response = $order->get_meta('_sgtm_webhook_response');
+            
+            // Dados do navegador
+            $browser_data = $order->get_meta('_browser_data');
+            
+            include WC_SGTM_WEBHOOK_PLUGIN_PATH . 'templates/admin/order-metabox.php';
         }
         
-        // Verificar problemas comuns
-        $issues = $this->check_common_issues();
-        
-        foreach ($issues as $issue) {
-            printf(
-                '<div class="notice notice-%s is-dismissible"><p><strong>%s:</strong> %s</p></div>',
-                esc_attr($issue['type']),
-                esc_html($issue['title']),
-                wp_kses_post($issue['message'])
+        /**
+         * Adicionar widget ao dashboard
+         */
+        public function add_dashboard_widget() {
+            if (!current_user_can('manage_woocommerce')) {
+                return;
+            }
+            
+            wp_add_dashboard_widget(
+                'wc_sgtm_dashboard_widget',
+                __('🚀 SGTM Webhook Status', 'wc-sgtm-webhook'),
+                array($this, 'render_dashboard_widget')
             );
         }
         
-        // Mostrar notificações de configuração
-        settings_errors('wc_sgtm_admin');
-    }
-    
-    /**
-     * Verificar problemas comuns
-     */
-    private function check_common_issues() {
-        $issues = array();
-        $settings = $this->plugin->get_settings();
-        
-        // Webhook desabilitado
-        if (!$settings['webhook_enabled']) {
-            $issues[] = array(
-                'type' => 'info',
-                'title' => __('SGTM Webhook', 'wc-sgtm-webhook'),
-                'message' => sprintf(
-                    __('O webhook está desabilitado. %s para ativá-lo.', 'wc-sgtm-webhook'),
-                    '<a href="' . admin_url('admin.php?page=wc-sgtm-webhook-settings') . '">' . __('Clique aqui', 'wc-sgtm-webhook') . '</a>'
-                )
-            );
+        /**
+         * Renderizar widget do dashboard
+         */
+        public function render_dashboard_widget() {
+            $stats = $this->get_enhanced_statistics();
+            $webhook_enabled = $this->plugin->get_setting('webhook_enabled', false);
+            
+            include WC_SGTM_WEBHOOK_PLUGIN_PATH . 'templates/admin/dashboard-widget.php';
         }
         
-        // URL não configurada
-        if (empty($settings['webhook_url']) && $settings['webhook_enabled']) {
-            $issues[] = array(
-                'type' => 'error',
-                'title' => __('SGTM Webhook', 'wc-sgtm-webhook'),
-                'message' => __('URL do webhook não configurada. Configure nas configurações do plugin.', 'wc-sgtm-webhook')
-            );
+        /**
+         * Mostrar notificações do admin
+         */
+        public function show_admin_notices() {
+            $screen = get_current_screen();
+            
+            // Só mostrar em páginas relevantes
+            if (!$screen || (strpos($screen->id, 'woocommerce') === false && strpos($screen->id, 'sgtm') === false)) {
+                return;
+            }
+            
+            // Verificar problemas comuns
+            $issues = $this->check_common_issues();
+            
+            foreach ($issues as $issue) {
+                printf(
+                    '<div class="notice notice-%s is-dismissible"><p><strong>%s:</strong> %s</p></div>',
+                    esc_attr($issue['type']),
+                    esc_html($issue['title']),
+                    wp_kses_post($issue['message'])
+                );
+            }
+            
+            // Mostrar notificações de configuração
+            settings_errors('wc_sgtm_admin');
         }
         
-        // Taxa de captura baixa
-        $browser_capture = $this->plugin->get_browser_capture();
-        if ($browser_capture) {
-            $capture_stats = $browser_capture->get_capture_statistics(7);
-            if ($capture_stats['capture_rate'] < 70) {
+        /**
+         * Verificar problemas comuns
+         */
+        private function check_common_issues() {
+            $issues = array();
+            $settings = $this->plugin->get_settings();
+            
+            // Webhook desabilitado
+            if (!$settings['webhook_enabled']) {
                 $issues[] = array(
-                    'type' => 'warning',
+                    'type' => 'info',
                     'title' => __('SGTM Webhook', 'wc-sgtm-webhook'),
                     'message' => sprintf(
-                        __('Taxa de captura de dados baixa: %s%%. Verifique se há conflitos de JavaScript.', 'wc-sgtm-webhook'),
-                        $capture_stats['capture_rate']
+                        __('O webhook está desabilitado. %s para ativá-lo.', 'wc-sgtm-webhook'),
+                        '<a href="' . admin_url('admin.php?page=wc-sgtm-webhook-settings') . '">' . __('Clique aqui', 'wc-sgtm-webhook') . '</a>'
                     )
                 );
             }
-        }
-        
-        // Muitos erros recentes
-        $recent_errors = $this->get_recent_error_count();
-        if ($recent_errors > 10) {
-            $issues[] = array(
-                'type' => 'error',
-                'title' => __('SGTM Webhook', 'wc-sgtm-webhook'),
-                'message' => sprintf(
-                    __('%d erros detectados nas últimas 24 horas. %s para investigar.', 'wc-sgtm-webhook'),
-                    $recent_errors,
-                    '<a href="' . admin_url('admin.php?page=wc-sgtm-webhook-logs') . '">' . __('Ver logs', 'wc-sgtm-webhook') . '</a>'
-                )
-            );
-        }
-        
-        return $issues;
-    }
-    
-    /**
-     * Links de ação do plugin
-     */
-    public function plugin_action_links($links) {
-        $settings_link = sprintf(
-            '<a href="%s">%s</a>',
-            admin_url('admin.php?page=wc-sgtm-webhook-settings'),
-            __('Configurações', 'wc-sgtm-webhook')
-        );
-        
-        $dashboard_link = sprintf(
-            '<a href="%s">%s</a>',
-            admin_url('admin.php?page=wc-sgtm-webhook'),
-            __('Dashboard', 'wc-sgtm-webhook')
-        );
-        
-        array_unshift($links, $settings_link, $dashboard_link);
-        
-        return $links;
-    }
-    
-    /**
-     * Obter estatísticas melhoradas com fallback
-     */
-    public function get_enhanced_statistics() {
-        try {
-            $manager = $this->plugin ? $this->plugin->get_statistics_manager() : null;
-            if ($manager && method_exists($manager, 'get_enhanced_statistics')) {
-                $stats = $manager->get_enhanced_statistics();
-                if (is_array($stats) && !empty($stats)) {
-                    return $stats;
-                }
+            
+            // URL não configurada
+            if (empty($settings['webhook_url']) && $settings['webhook_enabled']) {
+                $issues[] = array(
+                    'type' => 'error',
+                    'title' => __('SGTM Webhook', 'wc-sgtm-webhook'),
+                    'message' => __('URL do webhook não configurada. Configure nas configurações do plugin.', 'wc-sgtm-webhook')
+                );
             }
-        } catch (\Throwable $e) {
-            if ($this->logger) {
-                $this->logger->error('Falha ao obter estatísticas melhoradas', array(
-                    'error' => $e->getMessage()
-                ));
-            }
-        }
-
-        // Fallback seguro (valores padrão)
-        return array(
-            'total_sent' => 0,
-            'errors_today' => 0,
-            'success_rate' => 100,
-            'last_order_id' => null,
-            'last_sent' => null,
-            'total_revenue' => 0.0,
-            'with_browser_data' => 0,
-            'with_facebook_data' => 0,
-            'with_google_data' => 0,
-            'browser_data_rate' => 0,
-            'facebook_data_rate' => 0,
-            'google_data_rate' => 0,
-            'period_days' => 30
-        );
-    }
-    
-
-    
-    /**
-     * Calcular tendência
-     */
-    private function calculate_trend($recent, $previous) {
-        if ($previous == 0) return 'neutral';
-        
-        $change = (($recent - $previous) / $previous) * 100;
-        
-        if ($change > 10) return 'up';
-        if ($change < -10) return 'down';
-        return 'neutral';
-    }
-    
-    /**
-     * Obter pedidos recentes
-     */
-    private function get_recent_orders($limit = 20) {
-        $orders = wc_get_orders(array(
-            'limit' => $limit,
-            'orderby' => 'date',
-            'order' => 'DESC',
-            'status' => array('completed', 'processing', 'pending')
-        ));
-        
-        $processed_orders = array();
-        
-        foreach ($orders as $order) {
-            $order_id = $order->get_id();
             
-            $processed_orders[] = array(
-                'id' => $order_id,
-                'date' => $order->get_date_created(),
-                'status' => $order->get_status(),
-                'total' => $order->get_total(),
-                'webhook_sent' => $order->get_meta('_sgtm_webhook_sent'),
-                'webhook_error' => $order->get_meta('_sgtm_webhook_error'),
-                'webhook_response' => $order->get_meta('_sgtm_webhook_response'),
-                'browser_data' => $order->get_meta('_browser_data'),
-                'edit_url' => admin_url('post.php?post=' . $order_id . '&action=edit')
-            );
-        }
-        
-        return $processed_orders;
-    }
-    
-    /**
-     * Obter status do sistema
-     */
-    private function get_system_status() {
-        $settings = $this->plugin->get_settings();
-        
-        return array(
-            'php_version' => PHP_VERSION,
-            'wp_version' => get_bloginfo('version'),
-            'wc_version' => WC()->version,
-            'plugin_version' => WC_SGTM_WEBHOOK_VERSION,
-            'webhook_url' => $settings['webhook_url'],
-            'webhook_enabled' => $settings['webhook_enabled'],
-            'debug_mode' => $settings['debug_mode'],
-            'browser_capture_enabled' => $settings['browser_capture_enabled'],
-            'ssl_enabled' => is_ssl(),
-            'timezone' => get_option('timezone_string') ?: 'UTC',
-            'memory_limit' => ini_get('memory_limit'),
-            'max_execution_time' => ini_get('max_execution_time'),
-            'curl_available' => function_exists('curl_init'),
-            'openssl_available' => extension_loaded('openssl')
-        );
-    }
-    
-    /**
-     * Obter logs recentes
-     */
-    private function get_recent_logs($limit = 50) {
-        global $wpdb;
-        
-        // Tentar obter da tabela customizada primeiro
-        $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
-        
-        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name) {
-            $logs = $wpdb->get_results($wpdb->prepare("
-                SELECT * FROM $table_name 
-                ORDER BY created_at DESC 
-                LIMIT %d
-            ", $limit), ARRAY_A);
-            
-            return $logs;
-        }
-        
-        // Fallback para logs do WooCommerce
-        return $this->get_wc_logs($limit);
-    }
-    
-    /**
-     * Obter logs do WooCommerce
-     */
-    private function get_wc_logs($limit = 50) {
-        if (!function_exists('wc_get_logger')) {
-            return array();
-        }
-        
-        $log_files = glob(WC_LOG_DIR . '*sgtm-webhook*.log');
-        $logs = array();
-        
-        foreach ($log_files as $file) {
-            if (!is_file($file)) continue;
-            
-            $content = file_get_contents($file);
-            $lines = explode("\n", $content);
-            
-            foreach (array_reverse($lines) as $line) {
-                if (empty(trim($line)) || count($logs) >= $limit) {
-                    continue;
-                }
-                
-                if (preg_match('/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})\s+(\w+)\s+(.+)$/', $line, $matches)) {
-                    $logs[] = array(
-                        'created_at' => $matches[1],
-                        'status' => strtolower($matches[2]),
-                        'message' => $matches[3],
-                        'source' => 'wc_log'
+            // Taxa de captura baixa
+            $browser_capture = $this->plugin->get_browser_capture();
+            if ($browser_capture) {
+                $capture_stats = $browser_capture->get_capture_statistics(7);
+                if ($capture_stats['capture_rate'] < 70) {
+                    $issues[] = array(
+                        'type' => 'warning',
+                        'title' => __('SGTM Webhook', 'wc-sgtm-webhook'),
+                        'message' => sprintf(
+                            __('Taxa de captura de dados baixa: %s%%. Verifique se há conflitos de JavaScript.', 'wc-sgtm-webhook'),
+                            $capture_stats['capture_rate']
+                        )
                     );
                 }
             }
-        }
-        
-        return array_slice($logs, 0, $limit);
-    }
-    
-    /**
-     * Obter arquivos de log
-     */
-    private function get_log_files() {
-        $files = array();
-        
-        // Logs do WooCommerce
-        if (defined('WC_LOG_DIR')) {
-            $wc_files = glob(WC_LOG_DIR . '*sgtm-webhook*.log');
-            foreach ($wc_files as $file) {
-                $files[] = array(
-                    'name' => basename($file),
-                    'path' => $file,
-                    'size' => filesize($file),
-                    'modified' => filemtime($file),
-                    'type' => 'woocommerce'
+            
+            // Muitos erros recentes
+            $recent_errors = $this->get_recent_error_count();
+            if ($recent_errors > 10) {
+                $issues[] = array(
+                    'type' => 'error',
+                    'title' => __('SGTM Webhook', 'wc-sgtm-webhook'),
+                    'message' => sprintf(
+                        __('%d erros detectados nas últimas 24 horas. %s para investigar.', 'wc-sgtm-webhook'),
+                        $recent_errors,
+                        '<a href="' . admin_url('admin.php?page=wc-sgtm-webhook-logs') . '">' . __('Ver logs', 'wc-sgtm-webhook') . '</a>'
+                    )
                 );
             }
+            
+            return $issues;
         }
         
-        // Logs customizados
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
+        /**
+         * Links de ação do plugin
+         */
+        public function plugin_action_links($links) {
+            $settings_link = sprintf(
+                '<a href="%s">%s</a>',
+                admin_url('admin.php?page=wc-sgtm-webhook-settings'),
+                __('Configurações', 'wc-sgtm-webhook')
+            );
+            
+            $dashboard_link = sprintf(
+                '<a href="%s">%s</a>',
+                admin_url('admin.php?page=wc-sgtm-webhook'),
+                __('Dashboard', 'wc-sgtm-webhook')
+            );
+            
+            array_unshift($links, $settings_link, $dashboard_link);
+            
+            return $links;
+        }
         
-        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name) {
-            $count = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
-            $files[] = array(
-                'name' => 'Database Logs',
-                'path' => 'database',
-                'size' => $count,
-                'modified' => time(),
-                'type' => 'database'
+        /**
+         * Obter estatísticas melhoradas com fallback
+         */
+        public function get_enhanced_statistics() {
+            try {
+                $manager = $this->plugin ? $this->plugin->get_statistics_manager() : null;
+                if ($manager && method_exists($manager, 'get_enhanced_statistics')) {
+                    $stats = $manager->get_enhanced_statistics();
+                    if (is_array($stats) && !empty($stats)) {
+                        return $stats;
+                    }
+                }
+            } catch (\Throwable $e) {
+                if ($this->logger) {
+                    $this->logger->error('Falha ao obter estatísticas melhoradas', array(
+                        'error' => $e->getMessage()
+                    ));
+                }
+            }
+        
+            // Fallback seguro (valores padrão)
+            return array(
+                'total_sent' => 0,
+                'errors_today' => 0,
+                'success_rate' => 100,
+                'last_order_id' => null,
+                'last_sent' => null,
+                'total_revenue' => 0.0,
+                'with_browser_data' => 0,
+                'with_facebook_data' => 0,
+                'with_google_data' => 0,
+                'browser_data_rate' => 0,
+                'facebook_data_rate' => 0,
+                'google_data_rate' => 0,
+                'period_days' => 30
             );
         }
         
-        return $files;
-    }
     
-    /**
-     * Obter contagem de erros recentes
-     */
-    private function get_recent_error_count() {
-        global $wpdb;
         
-        $yesterday = date('Y-m-d H:i:s', strtotime('-24 hours'));
-        
-        $count = $wpdb->get_var($wpdb->prepare("
-            SELECT COUNT(DISTINCT p.ID) 
-            FROM {$wpdb->posts} p
-            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-            WHERE p.post_type = 'shop_order'
-            AND p.post_date >= %s
-            AND pm.meta_key = '_sgtm_webhook_error'
-            AND pm.meta_value != ''
-        ", $yesterday));
-        
-        return intval($count);
-    }
-    
-    /**
-     * Limpar logs antigos
-     */
-    public function cleanup_old_logs($days = 30) {
-        global $wpdb;
-        
-        // Limpar logs da tabela customizada
-        $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
-        
-        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name) {
-            $cutoff_date = date('Y-m-d H:i:s', strtotime("-{$days} days"));
+        /**
+         * Calcular tendência
+         */
+        private function calculate_trend($recent, $previous) {
+            if ($previous == 0) return 'neutral';
             
-            $deleted = $wpdb->query($wpdb->prepare("
-                DELETE FROM $table_name 
-                WHERE created_at < %s
-            ", $cutoff_date));
+            $change = (($recent - $previous) / $previous) * 100;
             
-            $this->logger->info('Logs antigos limpos', array(
-                'deleted_count' => $deleted,
-                'cutoff_date' => $cutoff_date
-            ));
+            if ($change > 10) return 'up';
+            if ($change < -10) return 'down';
+            return 'neutral';
         }
         
-        // Limpar arquivos de log do WooCommerce
-        if (defined('WC_LOG_DIR')) {
+        /**
+         * Obter pedidos recentes
+         */
+        private function get_recent_orders($limit = 20) {
+            $orders = wc_get_orders(array(
+                'limit' => $limit,
+                'orderby' => 'date',
+                'order' => 'DESC',
+                'status' => array('completed', 'processing', 'pending')
+            ));
+            
+            $processed_orders = array();
+            
+            foreach ($orders as $order) {
+                $order_id = $order->get_id();
+                
+                $processed_orders[] = array(
+                    'id' => $order_id,
+                    'date' => $order->get_date_created(),
+                    'status' => $order->get_status(),
+                    'total' => $order->get_total(),
+                    'webhook_sent' => $order->get_meta('_sgtm_webhook_sent'),
+                    'webhook_error' => $order->get_meta('_sgtm_webhook_error'),
+                    'webhook_response' => $order->get_meta('_sgtm_webhook_response'),
+                    'browser_data' => $order->get_meta('_browser_data'),
+                    'edit_url' => admin_url('post.php?post=' . $order_id . '&action=edit')
+                );
+            }
+            
+            return $processed_orders;
+        }
+        
+        /**
+         * Obter status do sistema
+         */
+        private function get_system_status() {
+            $settings = $this->plugin->get_settings();
+            
+            return array(
+                'php_version' => PHP_VERSION,
+                'wp_version' => get_bloginfo('version'),
+                'wc_version' => WC()->version,
+                'plugin_version' => WC_SGTM_WEBHOOK_VERSION,
+                'webhook_url' => $settings['webhook_url'],
+                'webhook_enabled' => $settings['webhook_enabled'],
+                'debug_mode' => $settings['debug_mode'],
+                'browser_capture_enabled' => $settings['browser_capture_enabled'],
+                'ssl_enabled' => is_ssl(),
+                'timezone' => get_option('timezone_string') ?: 'UTC',
+                'memory_limit' => ini_get('memory_limit'),
+                'max_execution_time' => ini_get('max_execution_time'),
+                'curl_available' => function_exists('curl_init'),
+                'openssl_available' => extension_loaded('openssl')
+            );
+        }
+        
+        /**
+         * Obter logs recentes
+         */
+        private function get_recent_logs($limit = 50) {
+            global $wpdb;
+            
+            // Tentar obter da tabela customizada primeiro
+            $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
+            
+            if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name) {
+                $logs = $wpdb->get_results($wpdb->prepare("
+                    SELECT * FROM $table_name 
+                    ORDER BY created_at DESC 
+                    LIMIT %d
+                ", $limit), ARRAY_A);
+                
+                return $logs;
+            }
+            
+            // Fallback para logs do WooCommerce
+            return $this->get_wc_logs($limit);
+        }
+        
+        /**
+         * Obter logs do WooCommerce
+         */
+        private function get_wc_logs($limit = 50) {
+            if (!function_exists('wc_get_logger')) {
+                return array();
+            }
+            
             $log_files = glob(WC_LOG_DIR . '*sgtm-webhook*.log');
-            $cutoff_time = time() - ($days * 24 * 60 * 60);
+            $logs = array();
             
             foreach ($log_files as $file) {
-                if (is_file($file) && filemtime($file) < $cutoff_time) {
-                    unlink($file);
+                if (!is_file($file)) continue;
+                
+                $content = file_get_contents($file);
+                $lines = explode("\n", $content);
+                
+                foreach (array_reverse($lines) as $line) {
+                    if (empty(trim($line)) || count($logs) >= $limit) {
+                        continue;
+                    }
+                    
+                    if (preg_match('/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})\s+(\w+)\s+(.+)$/', $line, $matches)) {
+                        $logs[] = array(
+                            'created_at' => $matches[1],
+                            'status' => strtolower($matches[2]),
+                            'message' => $matches[3],
+                            'source' => 'wc_log'
+                        );
+                    }
+                }
+            }
+            
+            return array_slice($logs, 0, $limit);
+        }
+        
+        /**
+         * Obter arquivos de log
+         */
+        private function get_log_files() {
+            $files = array();
+            
+            // Logs do WooCommerce
+            if (defined('WC_LOG_DIR')) {
+                $wc_files = glob(WC_LOG_DIR . '*sgtm-webhook*.log');
+                foreach ($wc_files as $file) {
+                    $files[] = array(
+                        'name' => basename($file),
+                        'path' => $file,
+                        'size' => filesize($file),
+                        'modified' => filemtime($file),
+                        'type' => 'woocommerce'
+                    );
+                }
+            }
+            
+            // Logs customizados
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
+            
+            if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name) {
+                $count = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
+                $files[] = array(
+                    'name' => 'Database Logs',
+                    'path' => 'database',
+                    'size' => $count,
+                    'modified' => time(),
+                    'type' => 'database'
+                );
+            }
+            
+            return $files;
+        }
+        
+        /**
+         * Obter contagem de erros recentes
+         */
+        private function get_recent_error_count() {
+            global $wpdb;
+            
+            $yesterday = date('Y-m-d H:i:s', strtotime('-24 hours'));
+            
+            $count = $wpdb->get_var($wpdb->prepare("
+                SELECT COUNT(DISTINCT p.ID) 
+                FROM {$wpdb->posts} p
+                INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+                WHERE p.post_type = 'shop_order'
+                AND p.post_date >= %s
+                AND pm.meta_key = '_sgtm_webhook_error'
+                AND pm.meta_value != ''
+            ", $yesterday));
+            
+            return intval($count);
+        }
+        
+        /**
+         * Limpar logs antigos
+         */
+        public function cleanup_old_logs($days = 30) {
+            global $wpdb;
+            
+            // Limpar logs da tabela customizada
+            $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
+            
+            if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name) {
+                $cutoff_date = date('Y-m-d H:i:s', strtotime("-{$days} days"));
+                
+                $deleted = $wpdb->query($wpdb->prepare("
+                    DELETE FROM $table_name 
+                    WHERE created_at < %s
+                ", $cutoff_date));
+                
+                $this->logger->info('Logs antigos limpos', array(
+                    'deleted_count' => $deleted,
+                    'cutoff_date' => $cutoff_date
+                ));
+            }
+            
+            // Limpar arquivos de log do WooCommerce
+            if (defined('WC_LOG_DIR')) {
+                $log_files = glob(WC_LOG_DIR . '*sgtm-webhook*.log');
+                $cutoff_time = time() - ($days * 24 * 60 * 60);
+                
+                foreach ($log_files as $file) {
+                    if (is_file($file) && filemtime($file) < $cutoff_time) {
+                        unlink($file);
+                    }
                 }
             }
         }
-    }
-    
-    /**
-     * Gerar relatório de performance
-     */
-    public function generate_performance_report($days = 7) {
-        $stats = $this->get_enhanced_statistics();
-        $browser_capture = $this->plugin->get_browser_capture();
-        $capture_stats = $browser_capture ? $browser_capture->get_capture_statistics($days) : array();
         
-        $report = array(
-            'period' => array(
-                'days' => $days,
-                'start_date' => date('Y-m-d', strtotime("-{$days} days")),
-                'end_date' => date('Y-m-d')
-            ),
-            'webhook_performance' => array(
-                'total_sent' => $stats['total_sent'],
-                'success_rate' => $stats['success_rate'],
-                'errors_today' => $stats['errors_today'],
-                'total_revenue' => $stats['total_revenue']
-            ),
-            'browser_capture_performance' => $capture_stats,
-            'system_status' => $this->get_system_status(),
-            'issues' => $this->check_common_issues(),
-            'generated_at' => current_time('mysql'),
-            'generated_by' => get_current_user_id()
-        );
-        
-        return $report;
+        /**
+         * Gerar relatório de performance
+         */
+        public function generate_performance_report($days = 7) {
+            $stats = $this->get_enhanced_statistics();
+            $browser_capture = $this->plugin->get_browser_capture();
+            $capture_stats = $browser_capture ? $browser_capture->get_capture_statistics($days) : array();
+            
+            $report = array(
+                'period' => array(
+                    'days' => $days,
+                    'start_date' => date('Y-m-d', strtotime("-{$days} days")),
+                    'end_date' => date('Y-m-d')
+                ),
+                'webhook_performance' => array(
+                    'total_sent' => $stats['total_sent'],
+                    'success_rate' => $stats['success_rate'],
+                    'errors_today' => $stats['errors_today'],
+                    'total_revenue' => $stats['total_revenue']
+                ),
+                'browser_capture_performance' => $capture_stats,
+                'system_status' => $this->get_system_status(),
+                'issues' => $this->check_common_issues(),
+                'generated_at' => current_time('mysql'),
+                'generated_by' => get_current_user_id()
+            );
+            
+            return $report;
+        }
     }
-}

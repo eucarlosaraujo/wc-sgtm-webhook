@@ -343,55 +343,55 @@ function wc_sgtm_get_product_brand($product) {
  * ENVIO DE DADOS VIA HTTP
  * ========================================
  */
-function wc_sgtm_enviar_dados($data) {
+function wc_sgtm_enviar_dados($order_id, $payload) {
+    try {
+        $webhook_url = wc_sgtm_get_setting('webhook_url');
+        $timeout     = absint(wc_sgtm_get_setting('timeout'));
+        $validate_ssl = !!wc_sgtm_get_setting('validate_ssl');
 
-    $url = wc_sgtm_get_setting('webhook_url', '');
-    if (empty($url)) {
-        wc_sgtm_log_debug('Webhook URL não configurada.');
-        return new WP_Error('no_url', 'Webhook URL não configurada.');
-    }
+        $headers = array(
+            'Content-Type' => 'application/json',
+            'Accept'       => 'application/json',
+            'User-Agent'   => 'WC-SGTM-Webhook/' . (defined('WC_SGTM_PLUGIN_VERSION') ? WC_SGTM_PLUGIN_VERSION : 'unknown'),
+        );
 
-    $args = array(
-        'body' => json_encode($data, JSON_UNESCAPED_UNICODE),
-        'headers' => array(
-            'Content-Type' => 'application/json; charset=utf-8',
-            'User-Agent' => 'WooCommerce-SGTM-Webhook/' . (defined('WC_SGTM_WEBHOOK_VERSION') ? WC_SGTM_WEBHOOK_VERSION : '1.x'),
-            'Accept' => 'application/json'
-        ),
-        'timeout' => (int) wc_sgtm_get_setting('timeout', 30),
-        'httpversion' => '1.1',
-        'sslverify' => (bool) wc_sgtm_get_setting('validate_ssl', true),
-        'blocking' => true
-    );
+        // Tokens/IDs por opções ou variáveis de ambiente (sem hard-code)
+        $auth_token = wc_sgtm_get_setting('sgtm_auth_token');
+        if (!$auth_token) {
+            $auth_token = getenv('WC_SGTM_AUTH_TOKEN') ?: '';
+        }
+        $client_id = wc_sgtm_get_setting('client_id');
+        if (!$client_id) {
+            $client_id = getenv('WC_SGTM_CLIENT_ID') ?: '';
+        }
+        if (!empty($auth_token)) {
+            $headers['Authorization'] = 'Bearer ' . $auth_token;
+            $headers['X-Auth-Token']  = $auth_token;
+        }
+        if (!empty($client_id)) {
+            $headers['X-Client-ID'] = $client_id;
+        }
 
-    // Optional auth headers
-    $auth_token = wc_sgtm_get_setting('auth_token', '');
-    if (!empty($auth_token)) {
-        $args['headers']['Authorization'] = 'Bearer ' . $auth_token;
-        wc_sgtm_log_debug('Auth token header habilitado');
-    }
-    $auth_key = wc_sgtm_get_setting('auth_key', '');
-    if (!empty($auth_key)) {
-        $args['headers']['X-Webhook-Key'] = $auth_key;
-        wc_sgtm_log_debug('Webhook key header habilitado');
-    }
+        // Extensibilidade
+        $headers = apply_filters('wc_sgtm_webhook_headers', $headers, $order_id, $payload);
 
-    // SGTM-specific headers via options
-    $opt_auth_token = get_option('sgtm_auth_token', '');
-    if (!empty($opt_auth_token)) {
-        $args['headers']['X-Auth-Token'] = $opt_auth_token;
-    }
-    $opt_client_id = get_option('sgtm_client_id', '');
-    if (!empty($opt_client_id)) {
-        $args['headers']['X-Client-ID'] = $opt_client_id;
-    }
+        $args = array(
+            'headers'     => $headers,
+            'body'        => wp_json_encode(apply_filters('wc_sgtm_webhook_payload', $payload, $order_id)),
+            'timeout'     => max(5, min(60, $timeout)),
+            'sslverify'   => (bool) $validate_ssl,
+        );
+        $args = apply_filters('wc_sgtm_webhook_request_args', $args, $order_id);
 
-    if (wc_sgtm_get_setting('debug_mode', false)) {
-        wc_sgtm_log_debug('Enviando POST para: ' . $url);
-        wc_sgtm_log_debug('Tamanho dos dados: ' . strlen($args['body']) . ' bytes');
-    }
+        $response = wp_remote_post(esc_url_raw($webhook_url), $args);
 
-    return wp_remote_post($url, $args);
+        return wc_sgtm_processar_resposta_webhook($order_id, $response, $webhook_url);
+    } catch (\Throwable $e) {
+        wc_sgtm_log_debug('Exceção no envio do webhook: ' . $e->getMessage(), array('order_id' => $order_id));
+        // Atualiza meta para rastrear erro
+        update_post_meta($order_id, '_sgtm_webhook_error', 'exception: ' . substr($e->getMessage(), 0, 300));
+        return array('success' => false, 'error' => 'exception', 'message' => $e->getMessage());
+    }
 }
 
 /**
@@ -399,7 +399,10 @@ function wc_sgtm_enviar_dados($data) {
  * PROCESSAR RESPOSTA DO WEBHOOK
  * ========================================
  */
-function wc_sgtm_processar_resposta_webhook($response, $order_id) {
+function wc_sgtm_processar_resposta_webhook($order_id, $response, $webhook_url) {
+
+    // Permite interceptar e personalizar tratamento de resposta
+    do_action('wc_sgtm_webhook_response_received', $order_id, $response, $webhook_url);
 
     if (is_wp_error($response)) {
         $error_message = $response->get_error_message();
@@ -1098,6 +1101,9 @@ function wc_sgtm_get_webhook_statistics() {
     if ($cached !== false) {
         return $cached;
     }
+    // Permite configurar/filtrar a expiração do cache
+    $expiry = apply_filters('wc_sgtm_statistics_cache_expiration', HOUR_IN_SECONDS);
+    set_transient($cache_key, $stats, absint($expiry));
     global $wpdb;
 
     // Pedidos com webhook enviado (últimos 30 dias)
@@ -1203,35 +1209,25 @@ function wc_sgtm_test_connectivity() {
 }
 
 // Obter logs recentes
-function wc_sgtm_get_recent_logs($limit = 10) {
-    if (!function_exists('wc_get_logger') || !defined('WC_LOG_DIR')) {
-        return array();
-    }
+function wc_sgtm_get_recent_logs($args = array()) {
+    global $wpdb;
+    
+    $limit  = isset($args['limit']) ? max(1, min(500, absint($args['limit']))) : 100;
+    $offset = isset($args['offset']) ? max(0, absint($args['offset'])) : 0;
+    $search = isset($args['search']) ? sanitize_text_field($args['search']) : '';
 
-    $log_files = glob(WC_LOG_DIR . 'sgtm-webhook-*.log');
-    $logs = array();
+    $like = '';
+    $where = '1=1';
+    if ($search !== '') {
+        $like  = '%' . $wpdb->esc_like($search) . '%';
+        $where = $wpdb->prepare('message LIKE %s', $like);
+    }
 
-    foreach ($log_files as $file) {
-        if (is_file($file)) {
-            $content = @file_get_contents($file);
-            if ($content === false) continue;
-            
-            $lines = explode("\n", $content);
+    $sql = "SELECT * FROM {$wpdb->prefix}wc_sgtm_logs WHERE {$where} ORDER BY created_at DESC LIMIT %d OFFSET %d";
+    $prepared = $wpdb->prepare($sql, $limit, $offset);
 
-            foreach (array_reverse(array_slice($lines, -$limit)) as $line) {
-                if (empty(trim($line))) continue;
-
-                if (preg_match('/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})\s+(.+)$/', $line, $matches)) {
-                    $logs[] = array(
-                        'timestamp' => date_i18n('d/m/Y H:i:s', strtotime($matches[1])),
-                        'message' => $matches[2]
-                    );
-                }
-            }
-        }
-    }
-
-    return array_slice($logs, 0, $limit);
+    $rows = $wpdb->get_results($prepared, ARRAY_A);
+    return $rows;
 }
 
 // Mostrar notificações admin

@@ -607,3 +607,51 @@ if (WC_SGTM_Webhook_Pro::get_instance()->is_debug_enabled()) {
         }
     });
 }
+
+// Requisitos mínimos
+if (!defined('WC_SGTM_MIN_PHP')) {
+    define('WC_SGTM_MIN_PHP', '7.4');
+}
+if (!defined('WC_SGTM_MIN_WC')) {
+    define('WC_SGTM_MIN_WC', '5.8');
+}
+
+function wc_sgtm_requirements_met() {
+    $php_ok = version_compare(PHP_VERSION, WC_SGTM_MIN_PHP, '>=');
+    $wc_ok  = false;
+
+    if (class_exists('WooCommerce') && function_exists('WC')) {
+        $wc_version = defined('WC_VERSION') ? WC_VERSION : (WC()->version ?? get_option('woocommerce_version'));
+        if (is_string($wc_version)) {
+            $wc_ok = version_compare($wc_version, WC_SGTM_MIN_WC, '>=');
+        }
+    }
+
+    return ($php_ok && $wc_ok);
+}
+
+function wc_sgtm_admin_notice_requirements() {
+    if (wc_sgtm_requirements_met()) {
+        return;
+    }
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    $msg = sprintf(
+        'WC-SGTM-Webhook requer PHP %s+ e WooCommerce %s+. Atualize seu ambiente para utilizar o plugin.',
+        esc_html(WC_SGTM_MIN_PHP),
+        esc_html(WC_SGTM_MIN_WC)
+    );
+    echo '<div class="notice notice-error"><p>' . esc_html($msg) . '</p></div>';
+}
+add_action('admin_notices', 'wc_sgtm_admin_notice_requirements');
+
+// Impede inicialização se requisitos não atendidos
+add_action('plugins_loaded', function () {
+    if (!wc_sgtm_requirements_met()) {
+        return;
+    }
+    // ... existing code ...
+});
+}
+}
