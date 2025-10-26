@@ -192,3 +192,110 @@ function wc_sgtm_webhook_test_connection($endpoint, $auth_key = '') {
         );
     }
 }
+
+/**
+ * Obter contagem de webhooks enviados nos últimos dias
+ *
+ * @param int $days Número de dias para filtrar
+ * @return int Contagem de webhooks
+ */
+function wc_sgtm_webhook_get_sent_count($days = 30) {
+    global $wpdb;
+    
+    $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
+    $date_limit = date('Y-m-d H:i:s', strtotime('-' . $days . ' days'));
+    
+    $query = $wpdb->prepare(
+        "SELECT COUNT(*) FROM $table_name WHERE date_created >= %s",
+        $date_limit
+    );
+    
+    return (int) $wpdb->get_var($query);
+}
+
+/**
+ * Obter contagem de erros de hoje
+ *
+ * @return int Contagem de erros
+ */
+function wc_sgtm_webhook_get_errors_today() {
+    global $wpdb;
+    
+    $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
+    $today_start = date('Y-m-d 00:00:00');
+    
+    $query = $wpdb->prepare(
+        "SELECT COUNT(*) FROM $table_name WHERE status = 'error' AND date_created >= %s",
+        $today_start
+    );
+    
+    return (int) $wpdb->get_var($query);
+}
+
+/**
+ * Obter taxa de sucesso de hoje
+ *
+ * @return float Taxa de sucesso (0-100)
+ */
+function wc_sgtm_webhook_get_success_rate() {
+    global $wpdb;
+    
+    $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
+    $today_start = date('Y-m-d 00:00:00');
+    
+    $total_query = $wpdb->prepare(
+        "SELECT COUNT(*) FROM $table_name WHERE date_created >= %s",
+        $today_start
+    );
+    
+    $success_query = $wpdb->prepare(
+        "SELECT COUNT(*) FROM $table_name WHERE status = 'success' AND date_created >= %s",
+        $today_start
+    );
+    
+    $total = (int) $wpdb->get_var($total_query);
+    $success = (int) $wpdb->get_var($success_query);
+    
+    if ($total === 0) {
+        return 100; // Se não houver envios, consideramos 100% de sucesso
+    }
+    
+    return round(($success / $total) * 100, 2);
+}
+
+/**
+ * Obter informações do último envio
+ *
+ * @return array|null Informações do último envio ou null se não houver
+ */
+function wc_sgtm_webhook_get_last_sent() {
+    global $wpdb;
+    
+    $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
+    
+    $query = "SELECT * FROM $table_name ORDER BY date_created DESC LIMIT 1";
+    
+    return $wpdb->get_row($query, ARRAY_A);
+}
+
+/**
+ * Obter total processado nos últimos dias
+ *
+ * @param int $days Número de dias para filtrar
+ * @return float Total processado
+ */
+function wc_sgtm_webhook_get_total_processed($days = 30) {
+    global $wpdb;
+    
+    $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
+    $date_limit = date('Y-m-d H:i:s', strtotime('-' . $days . ' days'));
+    
+    $query = $wpdb->prepare(
+        "SELECT SUM(order_total) FROM $table_name WHERE date_created >= %s AND status = 'success'",
+        $date_limit
+    );
+    
+    $total = $wpdb->get_var($query);
+    
+    return $total ? (float) $total : 0;
+}

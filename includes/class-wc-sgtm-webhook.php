@@ -261,16 +261,16 @@ class WC_SGTM_Webhook {
         if (empty($this->sgtm_endpoint)) {
             return false;
         }
-
+    
         // Adicionar informações de autenticação
         $headers = array(
             'Content-Type' => 'application/json',
         );
-
+    
         if (!empty($this->sgtm_auth_key)) {
             $headers['Authorization'] = 'Bearer ' . $this->sgtm_auth_key;
         }
-
+    
         // Enviar requisição
         $response = wp_remote_post(
             $this->sgtm_endpoint,
@@ -285,14 +285,46 @@ class WC_SGTM_Webhook {
                 'cookies' => array(),
             )
         );
-
+    
         // Registrar erro se houver
         if (is_wp_error($response)) {
             error_log('WC SGTM Webhook Error: ' . $response->get_error_message());
+            $this->log_webhook_event($data, 'error');
             return false;
         }
-
+    
+        // Registrar evento bem-sucedido
+        $this->log_webhook_event($data, 'success');
         return true;
+    }
+
+    /**
+     * Registrar evento de webhook no banco de dados
+     *
+     * @param array $data Dados enviados
+     * @param string $status Status do envio (success/error)
+     * @return void
+     */
+    private function log_webhook_event($data, $status = 'success') {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
+        
+        $event_type = isset($data['event']) ? $data['event'] : 'unknown';
+        $order_id = isset($data['order']['id']) ? $data['order']['id'] : null;
+        $order_total = isset($data['order']['total']) ? $data['order']['total'] : null;
+        
+        $wpdb->insert(
+            $table_name,
+            array(
+                'event_type' => $event_type,
+                'order_id' => $order_id,
+                'order_total' => $order_total,
+                'status' => $status,
+                'date_created' => current_time('mysql'),
+            ),
+            array('%s', '%d', '%f', '%s', '%s')
+        );
     }
 
     /**

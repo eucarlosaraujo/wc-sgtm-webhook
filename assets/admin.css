@@ -2,6 +2,7 @@
  * Estilos para o painel administrativo do WooCommerce SGTM Webhook
  */
 
+/* Estilos existentes */
 .wc-sgtm-webhook-settings {
     max-width: 800px;
 }
@@ -33,6 +34,87 @@
 
 .wc-sgtm-webhook-settings .events-list input[type="checkbox"] {
     margin-right: 8px;
+}
+
+/* Estilos para o painel de estatísticas */
+.wc-sgtm-webhook-dashboard {
+    margin-bottom: 30px;
+}
+
+.wc-sgtm-dashboard-title {
+    font-size: 1.3em;
+    margin: 20px 0 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.wc-sgtm-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.wc-sgtm-dashboard-card {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    padding: 15px;
+    border-radius: 3px;
+}
+
+.wc-sgtm-dashboard-card h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f1f1f1;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.wc-sgtm-stat-value {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #23282d;
+}
+
+.wc-sgtm-stat-note {
+    color: #72777c;
+    font-size: 12px;
+    margin: 0;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.active {
+    background-color: #46b450;
+    color: #fff;
+}
+
+.status-badge.inactive {
+    background-color: #dc3232;
+    color: #fff;
+}
+
+/* Responsividade */
+@media screen and (max-width: 1200px) {
+    .wc-sgtm-dashboard-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media screen and (max-width: 782px) {
+    .wc-sgtm-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .wc-sgtm-webhook-status {

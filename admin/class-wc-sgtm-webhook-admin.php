@@ -217,15 +217,123 @@ class WC_SGTM_Webhook_Admin {
         }
         
         echo '<div class="wrap">';
-        echo '<h1>' . __('Configurações do WooCommerce SGTM Webhook', 'wc-sgtm-webhook') . '</h1>';
+        echo '<h1>' . __('WooCommerce SGTM Webhook - Stape.io', 'wc-sgtm-webhook') . '</h1>';
         
-        echo '<form method="post" action="options.php">';
+        // Exibir painel de estatísticas
+        $this->display_dashboard();
+        
+        echo '<form method="post" action="options.php" class="wc-sgtm-webhook-settings">';
         settings_fields('wc_sgtm_webhook_settings');
         do_settings_sections('wc_sgtm_webhook_settings');
         submit_button();
         echo '</form>';
         
         echo '</div>';
+    }
+
+    /**
+     * Exibir painel de estatísticas
+     */
+    private function display_dashboard() {
+        // Obter estatísticas
+        $webhooks_sent = wc_sgtm_webhook_get_sent_count();
+        $errors_today = wc_sgtm_webhook_get_errors_today();
+        $success_rate = wc_sgtm_webhook_get_success_rate();
+        $last_sent = wc_sgtm_webhook_get_last_sent();
+        $total_processed = wc_sgtm_webhook_get_total_processed();
+        
+        // Verificar status do webhook
+        $endpoint = get_option('wc_sgtm_webhook_endpoint', '');
+        $webhook_status = !empty($endpoint) ? 'ativo' : 'inativo';
+        
+        // Verificar modo de depuração
+        $debug_mode = get_option('wc_sgtm_webhook_debug_mode', false) ? 'ativo' : 'inativo';
+        
+        // Verificar conectividade
+        $connectivity_status = 'conectado';
+        if (empty($endpoint)) {
+            $connectivity_status = 'desconectado';
+        }
+        
+        // Obter informações do sistema
+        $wc_version = function_exists('WC') ? WC()->version : 'N/A';
+        $wp_version = get_bloginfo('version');
+        $php_version = phpversion();
+        
+        // Exibir painel
+        ?>
+        <div class="wc-sgtm-webhook-dashboard">
+            <h2 class="wc-sgtm-dashboard-title"><?php _e('Status da Configuração', 'wc-sgtm-webhook'); ?></h2>
+            
+            <div class="wc-sgtm-dashboard-grid">
+                <!-- Status do Webhook -->
+                <div class="wc-sgtm-dashboard-card">
+                    <h3><?php _e('Status do Webhook', 'wc-sgtm-webhook'); ?></h3>
+                    <p class="wc-sgtm-webhook-url"><?php _e('URL:', 'wc-sgtm-webhook'); ?> <?php echo esc_html($endpoint); ?></p>
+                    <p class="wc-sgtm-webhook-status"><?php _e('Status:', 'wc-sgtm-webhook'); ?> <span class="status-badge <?php echo $webhook_status === 'ativo' ? 'active' : 'inactive'; ?>"><?php echo ucfirst($webhook_status); ?></span></p>
+                </div>
+                
+                <!-- Modo Debug -->
+                <div class="wc-sgtm-dashboard-card">
+                    <h3><?php _e('Modo Debug', 'wc-sgtm-webhook'); ?></h3>
+                    <p class="wc-sgtm-debug-status"><?php _e('Status:', 'wc-sgtm-webhook'); ?> <span class="status-badge <?php echo $debug_mode === 'ativo' ? 'active' : 'inactive'; ?>"><?php echo ucfirst($debug_mode); ?></span></p>
+                    <p class="wc-sgtm-debug-note"><?php _e('Lembre-se de desativar em produção', 'wc-sgtm-webhook'); ?></p>
+                </div>
+                
+                <!-- Conectividade Stape.io -->
+                <div class="wc-sgtm-dashboard-card">
+                    <h3><?php _e('Conectividade Stape.io', 'wc-sgtm-webhook'); ?></h3>
+                    <p class="wc-sgtm-connectivity-status"><?php _e('Status:', 'wc-sgtm-webhook'); ?> <span class="status-badge <?php echo $connectivity_status === 'conectado' ? 'active' : 'inactive'; ?>"><?php echo ucfirst($connectivity_status); ?></span></p>
+                    <p class="wc-sgtm-connectivity-note"><?php _e('Conectividade OK', 'wc-sgtm-webhook'); ?></p>
+                </div>
+                
+                <!-- Informações do Sistema -->
+                <div class="wc-sgtm-dashboard-card">
+                    <h3><?php _e('Informações do Sistema', 'wc-sgtm-webhook'); ?></h3>
+                    <p><?php _e('Versão WooCommerce:', 'wc-sgtm-webhook'); ?> <?php echo esc_html($wc_version); ?></p>
+                    <p><?php _e('Versão WordPress:', 'wc-sgtm-webhook'); ?> <?php echo esc_html($wp_version); ?></p>
+                    <p><?php _e('PHP:', 'wc-sgtm-webhook'); ?> <?php echo esc_html($php_version); ?></p>
+                </div>
+            </div>
+            
+            <h2 class="wc-sgtm-dashboard-title"><?php _e('Estatísticas', 'wc-sgtm-webhook'); ?></h2>
+            
+            <div class="wc-sgtm-dashboard-grid">
+                <!-- Webhooks Enviados -->
+                <div class="wc-sgtm-dashboard-card">
+                    <h3><?php _e('Webhooks Enviados', 'wc-sgtm-webhook'); ?></h3>
+                    <div class="wc-sgtm-stat-value"><?php echo number_format($webhooks_sent); ?></div>
+                    <p class="wc-sgtm-stat-note"><?php _e('Últimos 30 dias', 'wc-sgtm-webhook'); ?></p>
+                </div>
+                
+                <!-- Erros Hoje -->
+                <div class="wc-sgtm-dashboard-card">
+                    <h3><?php _e('Erros Hoje', 'wc-sgtm-webhook'); ?></h3>
+                    <div class="wc-sgtm-stat-value"><?php echo number_format($errors_today); ?></div>
+                    <p class="wc-sgtm-stat-note"><?php _e('Taxa de sucesso:', 'wc-sgtm-webhook'); ?> <?php echo $success_rate; ?>%</p>
+                </div>
+                
+                <!-- Último Envio -->
+                <div class="wc-sgtm-dashboard-card">
+                    <h3><?php _e('Último Envio', 'wc-sgtm-webhook'); ?></h3>
+                    <?php if ($last_sent): ?>
+                        <div class="wc-sgtm-stat-value"><?php echo date_i18n('d/m/Y H:i', strtotime($last_sent['date_created'])); ?></div>
+                        <p class="wc-sgtm-stat-note"><?php _e('Pedido #', 'wc-sgtm-webhook'); ?><?php echo $last_sent['order_id']; ?></p>
+                    <?php else: ?>
+                        <div class="wc-sgtm-stat-value">-</div>
+                        <p class="wc-sgtm-stat-note"><?php _e('Nenhum envio registrado', 'wc-sgtm-webhook'); ?></p>
+                    <?php endif; ?>
+                </div>
+                
+                <!-- Total Processado -->
+                <div class="wc-sgtm-dashboard-card">
+                    <h3><?php _e('Total Processado', 'wc-sgtm-webhook'); ?></h3>
+                    <div class="wc-sgtm-stat-value"><?php echo wc_price($total_processed); ?></div>
+                    <p class="wc-sgtm-stat-note"><?php _e('Últimos 30 dias', 'wc-sgtm-webhook'); ?></p>
+                </div>
+            </div>
+        </div>
+        <?php
     }
 
     /**

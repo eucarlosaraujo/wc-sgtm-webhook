@@ -83,7 +83,26 @@ function wc_sgtm_webhook_woocommerce_missing_notice() {
  * Função de ativação do plugin
  */
 function wc_sgtm_webhook_activate() {
-    // Código de ativação aqui
+    global $wpdb;
+    
+    $table_name = $wpdb->prefix . 'wc_sgtm_webhook_logs';
+    $charset_collate = $wpdb->get_charset_collate();
+    
+    $sql = "CREATE TABLE $table_name (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        event_type varchar(50) NOT NULL,
+        order_id bigint(20) NULL,
+        order_total decimal(10,2) NULL,
+        status varchar(20) NOT NULL,
+        date_created datetime NOT NULL,
+        PRIMARY KEY  (id)
+    ) $charset_collate;";
+    
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    dbDelta($sql);
+    
+    // Adicionar opção para controlar a versão da tabela
+    add_option('wc_sgtm_webhook_db_version', WC_SGTM_WEBHOOK_VERSION);
 }
 register_activation_hook(__FILE__, 'wc_sgtm_webhook_activate');
 
