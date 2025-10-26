@@ -274,8 +274,13 @@ class WC_SGTM_Webhook_Pro {
         if (!class_exists('WC_SGTM_Installer')) {
             require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/class-wc-sgtm-webhook-installer.php';
         }
-        
-        // Inicializar instalador
+
+        // Garantir que o logger exista durante a ativação
+        if (!$this->logger && class_exists('WC_SGTM_Logger')) {
+            $this->logger = new WC_SGTM_Logger();
+        }
+
+        // Inicializar instalador com logger garantido
         $installer = new WC_SGTM_Installer($this);
         $installer->install();
         

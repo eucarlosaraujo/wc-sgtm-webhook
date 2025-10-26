@@ -36,23 +36,30 @@ class WC_SGTM_Installer {
     public function __construct($plugin) {
         $this->plugin = $plugin;
         $this->logger = $plugin->get_logger();
+        if (!$this->logger && class_exists('WC_SGTM_Logger')) {
+            $this->logger = new WC_SGTM_Logger();
+        }
     }
 
     /**
      * Executar instalação
      */
     public function install() {
-        $this->logger->info('Iniciando instalação do plugin');
+        if ($this->logger) {
+            $this->logger->info('Iniciando instalação do plugin');
+        }
         
         // Criar tabela de estatísticas
         $this->create_stats_table();
         
         // Atualizar versão do plugin
         update_option('wc_sgtm_webhook_version', WC_SGTM_WEBHOOK_VERSION);
-        
-        $this->logger->info('Instalação do plugin concluída', array(
-            'version' => WC_SGTM_WEBHOOK_VERSION
-        ));
+
+        if ($this->logger) {
+            $this->logger->info('Instalação do plugin concluída', array(
+                'version' => WC_SGTM_WEBHOOK_VERSION
+            ));
+        }
     }
 
     /**
@@ -60,18 +67,21 @@ class WC_SGTM_Installer {
      */
     public function check_update() {
         $installed_version = get_option('wc_sgtm_webhook_version', '1.0.0');
-        
+
         if (version_compare($installed_version, WC_SGTM_WEBHOOK_VERSION, '<')) {
-            $this->logger->info('Atualizando plugin', array(
-                'from' => $installed_version,
-                'to' => WC_SGTM_WEBHOOK_VERSION
-            ));
-            
+            if ($this->logger) {
+                $this->logger->info('Atualizando plugin', array(
+                    'from' => $installed_version,
+                    'to' => WC_SGTM_WEBHOOK_VERSION
+                ));
+            }
+
             $this->update($installed_version);
-            
             update_option('wc_sgtm_webhook_version', WC_SGTM_WEBHOOK_VERSION);
-            
-            $this->logger->info('Atualização do plugin concluída');
+
+            if ($this->logger) {
+                $this->logger->info('Atualização do plugin concluída');
+            }
         }
     }
 
@@ -129,10 +139,12 @@ class WC_SGTM_Installer {
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
-        
-        $this->logger->info('Tabela de estatísticas criada', array(
-            'table_name' => $table_name
-        ));
+
+        if ($this->logger) {
+            $this->logger->info('Tabela de estatísticas criada', array(
+                'table_name' => $table_name
+            ));
+        }
     }
 
     /**
@@ -149,11 +161,13 @@ class WC_SGTM_Installer {
             return; // Sair se a tabela não existir
         }
         
-        // Obter pedidos com webhooks enviados nos últimos 30 dias
+        // Obter pedidos com webhooks enviados nos útimos 30 dias
         $orders = $wpdb->get_results($wpdb->prepare("SELECT p.ID, pm.meta_value as sent_date FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id WHERE p.post_type = 'shop_order' AND p.post_date >= %s AND pm.meta_key = '_sgtm_webhook_sent' AND pm.meta_value != '' ORDER BY pm.meta_value DESC", $thirty_days_ago));
         
         if (empty($orders)) {
-            $this->logger->info('Nenhum dado legado para migrar');
+            if ($this->logger) {
+                $this->logger->info('Nenhum dado legado para migrar');
+            }
             return;
         }
         
@@ -189,9 +203,11 @@ class WC_SGTM_Installer {
             $migrated++;
         }
         
-        $this->logger->info('Migração de dados legados concluída', array(
-            'migrated' => $migrated,
-            'total' => count($orders)
-        ));
+        if ($this->logger) {
+            $this->logger->info('Migração de dados legados concluída', array(
+                'migrated' => $migrated,
+                'total' => count($orders)
+            ));
+        }
     }
 }
