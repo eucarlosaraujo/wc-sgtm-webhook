@@ -1,16 +1,16 @@
 <?php
 /**
- * Plugin Name: WooCommerce SGTM Webhook Pro
- * Plugin URI: https://github.com/seu-usuario/wc-sgtm-webhook-pro
- * Description: Plugin profissional para envio de dados WooCommerce para Server-Side GTM via Stape.io com captura avançada de dados do navegador.
- * Version: 2.0.0
+ * Plugin Name: WooCommerce SGTM Webhook
+ * Plugin URI: https://wordpress.org/plugins/wc-sgtm-webhook/
+ * Description: Integração profissional do WooCommerce com Server-Side Google Tag Manager via webhooks para rastreamento avançado de e-commerce.
+ * Version: 1.0.0
  * Author: Seu Nome
- * Author URI: https://seusite.com
+ * Author URI: https://profiles.wordpress.org/seuusuario/
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: wc-sgtm-webhook
  * Domain Path: /languages
- * Requires at least: 5.0
+ * Requires at least: 5.6
  * Tested up to: 6.4
  * WC requires at least: 5.0
  * WC tested up to: 8.5
@@ -33,7 +33,7 @@ if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get
  * DEFINIÇÕES E CONSTANTES
  * ========================================
  */
-define('WC_SGTM_WEBHOOK_VERSION', '2.0.0');
+define('WC_SGTM_WEBHOOK_VERSION', '1.0.0');
 define('WC_SGTM_WEBHOOK_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WC_SGTM_WEBHOOK_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('WC_SGTM_WEBHOOK_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -145,10 +145,9 @@ class WC_SGTM_Webhook_Pro {
      * Incluir arquivos necessários
      */
     private function includes() {
-        // Classes principais
+        // Classes principais (apenas arquivos que existem)
         require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/helpers.php';
         require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/class-wc-sgtm-webhook-logger.php';
-        // Browser capture é definido aqui
         require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/class-wc-sgtm-webhook.php';
         require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/class-wc-sgtm-webhook-sender.php';
         require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/class-wc-sgtm-webhook-statistics-manager.php';
@@ -156,18 +155,6 @@ class WC_SGTM_Webhook_Pro {
     
         // Admin
         require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'admin/class-wc-sgtm-webhook-admin.php';
-        
-        // Utilitários
-        require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/class-wc-sgtm-webhook-data-processor.php';
-        require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/class-wc-sgtm-webhook-privacy-handler.php';
-        require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/class-wc-sgtm-webhook-validator.php';
-        
-        // Hooks e filtros
-        require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/wc-sgtm-webhook-hooks.php';
-        require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/wc-sgtm-webhook-ajax-handlers.php';
-        
-        // Compatibilidade
-        require_once WC_SGTM_WEBHOOK_PLUGIN_PATH . 'includes/wc-sgtm-webhook-compatibility.php';
     }
     
     /**
@@ -183,7 +170,7 @@ class WC_SGTM_Webhook_Pro {
         $this->statistics_manager = new WC_SGTM_Statistics_Manager($this);
     
         // Inicializar painel de administração
-        $this->admin_panel = new WC_SGTM_Admin_Panel($this->settings, $this->logger);
+        $this->admin_panel = new WC_SGTM_Admin_Panel($this->settings, $this->logger, $this);
     
         // Inicializar instalador
         $installer = new WC_SGTM_Installer($this);

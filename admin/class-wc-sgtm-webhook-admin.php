@@ -30,10 +30,10 @@ class WC_SGTM_Admin_Panel {
     /**
      * Constructor
      */
-    public function __construct($settings, $logger) {
+    public function __construct($settings, $logger, $plugin = null) {
         $this->settings = $settings;
         $this->logger = $logger;
-        $this->plugin = wc_sgtm_webhook_pro();
+        $this->plugin = $plugin ?: wc_sgtm_webhook_pro();
     }
     
     /**
@@ -566,105 +566,7 @@ class WC_SGTM_Admin_Panel {
         );
     }
     
-    /**
-     * Obter estatísticas melhoradas
-     */
-    private function get_enhanced_statistics() {
-        global $wpdb;
-        
-        $thirty_days_ago = date('Y-m-d H:i:s', strtotime('-30 days'));
-        $seven_days_ago = date('Y-m-d H:i:s', strtotime('-7 days'));
-        $today = date('Y-m-d 00:00:00');
-        
-        // Webhooks enviados (30 dias)
-        $total_sent = $wpdb->get_var($wpdb->prepare("
-            SELECT COUNT(DISTINCT p.ID) 
-            FROM {$wpdb->posts} p
-            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-            WHERE p.post_type = 'shop_order'
-            AND p.post_date >= %s
-            AND pm.meta_key = '_sgtm_webhook_sent'
-            AND pm.meta_value != ''
-        ", $thirty_days_ago));
-        
-        // Webhooks enviados (7 dias)
-        $sent_7_days = $wpdb->get_var($wpdb->prepare("
-            SELECT COUNT(DISTINCT p.ID) 
-            FROM {$wpdb->posts} p
-            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-            WHERE p.post_type = 'shop_order'
-            AND p.post_date >= %s
-            AND pm.meta_key = '_sgtm_webhook_sent'
-            AND pm.meta_value != ''
-        ", $seven_days_ago));
-        
-        // Erros hoje
-        $errors_today = $wpdb->get_var($wpdb->prepare("
-            SELECT COUNT(DISTINCT p.ID) 
-            FROM {$wpdb->posts} p
-            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-            WHERE p.post_type = 'shop_order'
-            AND p.post_date >= %s
-            AND pm.meta_key = '_sgtm_webhook_error'
-            AND pm.meta_value != ''
-        ", $today));
-        
-        // Pedidos com browser data (30 dias)
-        $with_browser_data = $wpdb->get_var($wpdb->prepare("
-            SELECT COUNT(DISTINCT p.ID) 
-            FROM {$wpdb->posts} p
-            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-            WHERE p.post_type = 'shop_order'
-            AND p.post_date >= %s
-            AND pm.meta_key = '_browser_data'
-            AND pm.meta_value != ''
-        ", $thirty_days_ago));
-        
-        // Último webhook enviado
-        $last_webhook = $wpdb->get_row("
-            SELECT p.ID, pm.meta_value as sent_date
-            FROM {$wpdb->posts} p
-            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-            WHERE p.post_type = 'shop_order'
-            AND pm.meta_key = '_sgtm_webhook_sent'
-            AND pm.meta_value != ''
-            ORDER BY pm.meta_value DESC
-            LIMIT 1
-        ");
-        
-        // Receita total processada (30 dias)
-        $total_revenue = $wpdb->get_var($wpdb->prepare("
-            SELECT SUM(CAST(pm2.meta_value AS DECIMAL(10,2)))
-            FROM {$wpdb->posts} p
-            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-            INNER JOIN {$wpdb->postmeta} pm2 ON p.ID = pm2.post_id
-            WHERE p.post_type = 'shop_order'
-            AND p.post_date >= %s
-            AND pm.meta_key = '_sgtm_webhook_sent'
-            AND pm.meta_value != ''
-            AND pm2.meta_key = '_order_total'
-        ", $thirty_days_ago));
-        
-        // Calcular taxas
-        $total_orders = $total_sent + $errors_today;
-        $success_rate = $total_orders > 0 ? round((($total_sent / $total_orders) * 100), 1) : 100;
-        $browser_data_rate = $total_sent > 0 ? round((($with_browser_data / $total_sent) * 100), 1) : 0;
-        
-        return array(
-            'total_sent' => intval($total_sent),
-            'sent_7_days' => intval($sent_7_days),
-            'errors_today' => intval($errors_today),
-            'with_browser_data' => intval($with_browser_data),
-            'success_rate' => $success_rate,
-            'browser_data_rate' => $browser_data_rate,
-            'last_webhook' => $last_webhook ? array(
-                'order_id' => $last_webhook->ID,
-                'sent_date' => $last_webhook->sent_date
-            ) : null,
-            'total_revenue' => floatval($total_revenue) ?: 0,
-            'trend_direction' => $this->calculate_trend($sent_7_days, $total_sent - $sent_7_days)
-        );
-    }
+
     
     /**
      * Calcular tendência
