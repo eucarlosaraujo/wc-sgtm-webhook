@@ -37,6 +37,12 @@ function wc_sgtm_get_setting($key, $default = null) {
             return $default ?? 30;
         case 'validate_ssl':
             return $default ?? true;
+        case 'auth_token':
+            return defined('SGTM_AUTH_TOKEN') ? SGTM_AUTH_TOKEN : ($default ?? '');
+        case 'auth_key':
+            return defined('SGTM_AUTH_KEY') ? SGTM_AUTH_KEY : ($default ?? '');
+        case 'rate_limit_seconds':
+            return $default ?? 60;
         default:
             return $default;
     }
@@ -73,11 +79,22 @@ function wc_sgtm_enviar_webhook_pedido_pago($order_id) {
         // Evitar envios duplicados
         $webhook_sent = get_post_meta($order_id, '_sgtm_webhook_sent', true);
         if ($webhook_sent) {
-            wc_sgtm_log_debug('Webhook já enviado para pedido: ' . $order_id . ' em ' . $webhook_sent);
-            return;
-        }
+            wc_sgtm_log_debug('Webhook já enviado para pedido: ' . $order_id . ' em ' . $webhook_sent);
+            return;
+        }
 
-        // Preparar dados do pedido
+        // Rate limiting para evitar reenvios rápidos
+        $rate_limit = (int) wc_sgtm_get_setting('rate_limit_seconds', 60);
+        $last_attempt = get_post_meta($order_id, '_sgtm_webhook_last_attempt', true);
+        if (!empty($last_attempt)) {
+            $elapsed = time() - strtotime($last_attempt);
+            if ($elapsed < $rate_limit) {
+                wc_sgtm_log_debug('Rate limit ativo para pedido ' . $order_id . ' (última tentativa: ' . $last_attempt . ')');
+                return;
+            }
+        }
+
+        // Preparar dados do pedido
         $order_data = wc_sgtm_preparar_dados_pedido($order);
 
         if (empty($order_data)) {
@@ -87,8 +104,11 @@ function wc_sgtm_enviar_webhook_pedido_pago($order_id) {
 
         wc_sgtm_log_debug('Enviando webhook para pedido: ' . $order_id);
 
-        // Enviar webhook
-        $response = wc_sgtm_enviar_dados($order_data);
+        // Marcar tentativa para rate limiting
+        update_post_meta($order_id, '_sgtm_webhook_last_attempt', current_time('mysql'));
+
+        // Enviar webhook
+        $response = wc_sgtm_enviar_dados($order_data);
 
         // Processar resposta
         wc_sgtm_processar_resposta_webhook($response, $order_id);
@@ -344,6 +364,28 @@ function wc_sgtm_enviar_dados($data) {
         'blocking' => true
     );
 
+    // Optional auth headers
+    $auth_token = wc_sgtm_get_setting('auth_token', '');
+    if (!empty($auth_token)) {
+        $args['headers']['Authorization'] = 'Bearer ' . $auth_token;
+        wc_sgtm_log_debug('Auth token header habilitado');
+    }
+    $auth_key = wc_sgtm_get_setting('auth_key', '');
+    if (!empty($auth_key)) {
+        $args['headers']['X-Webhook-Key'] = $auth_key;
+        wc_sgtm_log_debug('Webhook key header habilitado');
+    }
+
+    // SGTM-specific headers via options
+    $opt_auth_token = get_option('sgtm_auth_token', '');
+    if (!empty($opt_auth_token)) {
+        $args['headers']['X-Auth-Token'] = $opt_auth_token;
+    }
+    $opt_client_id = get_option('sgtm_client_id', '');
+    if (!empty($opt_client_id)) {
+        $args['headers']['X-Client-ID'] = $opt_client_id;
+    }
+
     if (wc_sgtm_get_setting('debug_mode', false)) {
         wc_sgtm_log_debug('Enviando POST para: ' . $url);
         wc_sgtm_log_debug('Tamanho dos dados: ' . strlen($args['body']) . ' bytes');
@@ -359,46 +401,49 @@ function wc_sgtm_enviar_dados($data) {
  */
 function wc_sgtm_processar_resposta_webhook($response, $order_id) {
 
-    if (is_wp_error($response)) {
-        $error_message = $response->get_error_message();
-        wc_sgtm_log_debug('Erro de conexão no webhook - Pedido ' . $order_id . ': ' . $error_message);
+    if (is_wp_error($response)) {
+        $error_message = $response->get_error_message();
+        wc_sgtm_log_debug('Erro de conexão no webhook - Pedido ' . $order_id . ': ' . $error_message);
 
-        update_post_meta($order_id, '_sgtm_webhook_error', array(
-            'timestamp' => current_time('mysql'),
-            'type' => 'connection_error',
-            'error' => $error_message
-        ));
+        update_post_meta($order_id, '_sgtm_webhook_error', array(
+            'timestamp' => current_time('mysql'),
+            'type' => 'connection_error',
+            'error' => $error_message
+        ));
 
-        return false;
-    }
+        return false;
+    }
 
-    $response_code = wp_remote_retrieve_response_code($response);
-    $response_body = wp_remote_retrieve_body($response);
+    $response_code = wp_remote_retrieve_response_code($response);
+    $response_body = wp_remote_retrieve_body($response);
 
-    wc_sgtm_log_debug('Resposta webhook - Pedido ' . $order_id . ' - Código: ' . $response_code);
+    wc_sgtm_log_debug('Resposta webhook - Pedido ' . $order_id . ' - Código: ' . $response_code);
 
-    if ($response_code >= 200 && $response_code < 300) {
-        update_post_meta($order_id, '_sgtm_webhook_sent', current_time('mysql'));
-        update_post_meta($order_id, '_sgtm_webhook_response', array(
-            'code' => $response_code,
-            'body' => substr($response_body, 0, 500) // Limitar tamanho
-        ));
+    if ($response_code >= 200 && $response_code < 300) {
+        if ($response_code === 204) {
+            wc_sgtm_log_debug('SGTM respondeu 204 (No Content) - sucesso sem corpo');
+        }
+        update_post_meta($order_id, '_sgtm_webhook_sent', current_time('mysql'));
+        update_post_meta($order_id, '_sgtm_webhook_response', array(
+            'code' => $response_code,
+            'body' => substr($response_body, 0, 500) // Limitar tamanho
+        ));
 
-        wc_sgtm_log_debug('Webhook enviado com sucesso para pedido: ' . $order_id);
-        return true;
+        wc_sgtm_log_debug('Webhook enviado com sucesso para pedido: ' . $order_id);
+        return true;
 
-    } else {
-        wc_sgtm_log_debug('Erro HTTP no webhook - Pedido ' . $order_id . ' - Código: ' . $response_code);
+    } else {
+        wc_sgtm_log_debug('Erro HTTP no webhook - Pedido ' . $order_id . ' - Código: ' . $response_code);
 
-        update_post_meta($order_id, '_sgtm_webhook_error', array(
-            'timestamp' => current_time('mysql'),
-            'type' => 'http_error',
-            'code' => $response_code,
-            'body' => substr($response_body, 0, 500)
-        ));
+        update_post_meta($order_id, '_sgtm_webhook_error', array(
+            'timestamp' => current_time('mysql'),
+            'type' => 'http_error',
+            'code' => $response_code,
+            'body' => substr($response_body, 0, 500)
+        ));
 
-        return false;
-    }
+        return false;
+    }
 }
 
 /**
@@ -407,21 +452,37 @@ function wc_sgtm_processar_resposta_webhook($response, $order_id) {
  * ========================================
  */
 function wc_sgtm_log_debug($message) {
-    if (!defined('SGTM_DEBUG_MODE') || !SGTM_DEBUG_MODE) {
-        return;
-    }
+    if (!wc_sgtm_get_setting('debug_mode', false)) {
+        return;
+    }
 
-    $timestamp = current_time('Y-m-d H:i:s');
-    $log_message = '[' . $timestamp . '] SGTM Webhook: ' . $message;
+    // Redação de dados sensíveis
+    $redacted = $message;
+    // Emails
+    $redacted = preg_replace('/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i', '[email_redacted]', $redacted);
+    // Telefones (10+ dígitos)
+    $redacted = preg_replace('/\b\d{10,}\b/', '[phone_redacted]', $redacted);
 
-    if (function_exists('wc_get_logger')) {
-        // Log para o arquivo de log do WooCommerce
-        $logger = wc_get_logger();
-        $logger->info($message, array('source' => 'sgtm-webhook'));
-    }
-    
-    // Log para o log de erro geral (o snippet usava error_log)
-    error_log($log_message);
+    $iso_timestamp = date('c');
+    $log_line = $iso_timestamp . ' ' . $redacted;
+
+    if (function_exists('wc_get_logger')) {
+        // Log para WooCommerce
+        $logger = wc_get_logger();
+        $logger->info($redacted, array('source' => 'sgtm-webhook'));
+    }
+
+    // Log dedicado no diretório do WooCommerce com limite de 10MB
+    if (defined('WC_LOG_DIR')) {
+        $log_file = rtrim(WC_LOG_DIR, '\\/') . DIRECTORY_SEPARATOR . 'sgtm-webhook-' . date('Y-m-d') . '.log';
+        if (file_exists($log_file) && filesize($log_file) > 10485760) { // 10MB
+            @unlink($log_file);
+        }
+        @file_put_contents($log_file, $log_line . PHP_EOL, FILE_APPEND);
+    }
+
+    // Também enviar para o error_log padrão
+    error_log('[SGTM] ' . $log_line);
 }
 
 /**
@@ -441,11 +502,12 @@ add_action('woocommerce_payment_complete', 'wc_sgtm_enviar_webhook_pedido_pago',
  * ========================================
  */
 function wc_sgtm_reenviar_webhook_manual($order_id) {
-    delete_post_meta($order_id, '_sgtm_webhook_sent');
-    delete_post_meta($order_id, '_sgtm_webhook_error');
-    delete_post_meta($order_id, '_sgtm_webhook_response');
+    delete_post_meta($order_id, '_sgtm_webhook_sent');
+    delete_post_meta($order_id, '_sgtm_webhook_error');
+    delete_post_meta($order_id, '_sgtm_webhook_response');
+    delete_post_meta($order_id, '_sgtm_webhook_last_attempt');
 
-    wc_sgtm_enviar_webhook_pedido_pago($order_id);
+    wc_sgtm_enviar_webhook_pedido_pago($order_id);
 }
 
 // Ajax handler para reenvio
@@ -468,14 +530,14 @@ add_action('wp_ajax_wc_sgtm_reenviar_webhook', function() {
  * INFORMAÇÕES DE DEBUG
  * ========================================
  */
-if (defined('SGTM_DEBUG_MODE') && SGTM_DEBUG_MODE) {
-    wc_sgtm_log_debug('SGTM Webhook Plugin CORRIGIDO carregado - Versão: 1.1');
-    if (defined('SGTM_WEBHOOK_URL')) {
-        wc_sgtm_log_debug('URL configurada: ' . SGTM_WEBHOOK_URL);
+if (wc_sgtm_get_setting('debug_mode', false)) {
+    wc_sgtm_log_debug('SGTM Webhook Plugin carregado - Versão: ' . (defined('WC_SGTM_WEBHOOK_VERSION') ? WC_SGTM_WEBHOOK_VERSION : '1.x'));
+    $url = wc_sgtm_get_setting('webhook_url', '');
+    if (!empty($url)) {
+        wc_sgtm_log_debug('URL configurada: ' . $url);
     }
-    if (defined('SGTM_WEBHOOK_ENABLED')) {
-        wc_sgtm_log_debug('Status: ' . (SGTM_WEBHOOK_ENABLED ? 'Ativo' : 'Inativo'));
-    }
+    $enabled = (bool) wc_sgtm_get_setting('webhook_enabled', false);
+    wc_sgtm_log_debug('Status: ' . ($enabled ? 'Ativo' : 'Inativo'));
 }
 
 
@@ -507,7 +569,7 @@ add_action('admin_menu', 'wc_sgtm_add_admin_menu');
 function wc_sgtm_admin_page() {
 
     // Processar ações do formulário
-    if (isset($_POST['action']) && wp_verify_nonce($_POST['_wpnonce'], 'wc_sgtm_admin_action')) {
+    if (isset($_POST['action'], $_POST['_wpnonce']) && wp_verify_nonce($_POST['_wpnonce'], 'wc_sgtm_admin_action')) {
 
         switch ($_POST['action']) {
             case 'test_webhook':
@@ -1031,6 +1093,11 @@ function wc_sgtm_reprocess_recent_orders() {
 
 // Obter estatísticas
 function wc_sgtm_get_webhook_statistics() {
+    $cache_key = 'wc_sgtm_stats_' . date('YmdH');
+    $cached = get_transient($cache_key);
+    if ($cached !== false) {
+        return $cached;
+    }
     global $wpdb;
 
     // Pedidos com webhook enviado (últimos 30 dias)
@@ -1048,15 +1115,18 @@ function wc_sgtm_get_webhook_statistics() {
 
     // Erros hoje
     $today = date('Y-m-d');
+    $start_today = $today . ' 00:00:00';
+    $end_today = $today . ' 23:59:59';
     $errors_today = $wpdb->get_var($wpdb->prepare("
         SELECT COUNT(DISTINCT p.ID)
         FROM {$wpdb->posts} p
         INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
         WHERE p.post_type = 'shop_order'
-        AND DATE(p.post_date) = %s
+        AND p.post_date >= %s
+        AND p.post_date < %s
         AND pm.meta_key = '_sgtm_webhook_error'
         AND pm.meta_value != ''
-    ", $today));
+    ", $start_today, $end_today));
 
     // Último envio
     $last_sent_order = $wpdb->get_row("
@@ -1089,42 +1159,47 @@ function wc_sgtm_get_webhook_statistics() {
         FROM {$wpdb->posts} p
         INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
         WHERE p.post_type = 'shop_order'
-        AND DATE(p.post_date) = %s
+        AND p.post_date >= %s
+        AND p.post_date < %s
         AND pm.meta_key = '_sgtm_webhook_sent'
         AND pm.meta_value != ''
-    ", $today));
+    ", $start_today, $end_today));
 
     $total_webhooks_today = $success_today + (int)$errors_today;
     $success_rate = $total_webhooks_today > 0 ? round(($success_today / $total_webhooks_today) * 100, 1) : 100;
 
-    return array(
-        'total_sent' => (int)$total_sent,
-        'errors_today' => (int)$errors_today,
-        'success_rate' => $success_rate,
-        'last_sent' => $last_sent_order ? date_i18n('d/m/Y H:i', strtotime($last_sent_order->sent_date)) : null,
-        'last_order_id' => $last_sent_order ? $last_sent_order->ID : null,
-        'total_revenue' => (float)$total_revenue ?: 0
-    );
+    $stats = array(
+        'total_sent' => (int)$total_sent,
+        'errors_today' => (int)$errors_today,
+        'success_rate' => $success_rate,
+        'last_sent' => $last_sent_order ? date_i18n('d/m/Y H:i', strtotime($last_sent_order->sent_date)) : null,
+        'last_order_id' => $last_sent_order ? $last_sent_order->ID : null,
+        'total_revenue' => (float)$total_revenue ?: 0
+    );
+
+    set_transient($cache_key, $stats, HOUR_IN_SECONDS);
+    return $stats;
 }
 
 // Testar conectividade
 function wc_sgtm_test_connectivity() {
-    if (!defined('SGTM_WEBHOOK_URL')) {
-        return array('status' => 'error', 'message' => 'URL não configurada');
-    }
+    $url = wc_sgtm_get_setting('webhook_url', '');
+    if (empty($url)) {
+        return array('status' => 'error', 'message' => 'URL não configurada');
+    }
 
-    $response = wp_remote_get(SGTM_WEBHOOK_URL, array('timeout' => 10));
+    $response = wp_remote_get($url, array('timeout' => 10));
 
-    if (is_wp_error($response)) {
-        return array('status' => 'error', 'message' => $response->get_error_message());
-    }
+    if (is_wp_error($response)) {
+        return array('status' => 'error', 'message' => $response->get_error_message());
+    }
 
-    $code = wp_remote_retrieve_response_code($response);
-    if ($code == 200 || $code == 405) { // 405 é normal para GET em endpoint POST
-        return array('status' => 'success', 'message' => 'Conectividade OK');
-    }
+    $code = wp_remote_retrieve_response_code($response);
+    if ($code == 200 || $code == 405) { // 405 é normal para GET em endpoint POST
+        return array('status' => 'success', 'message' => 'Conectividade OK');
+    }
 
-    return array('status' => 'error', 'message' => 'Código HTTP: ' . $code);
+    return array('status' => 'error', 'message' => 'Código HTTP: ' . $code);
 }
 
 // Obter logs recentes

@@ -33,10 +33,18 @@ if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get
  * DEFINIÇÕES E CONSTANTES
  * ========================================
  */
-define('WC_SGTM_WEBHOOK_VERSION', '1.0.0');
-define('WC_SGTM_WEBHOOK_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('WC_SGTM_WEBHOOK_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('WC_SGTM_WEBHOOK_PLUGIN_BASENAME', plugin_basename(__FILE__));
+if (!defined('WC_SGTM_WEBHOOK_VERSION')) {
+    define('WC_SGTM_WEBHOOK_VERSION', '1.0.0');
+}
+if (!defined('WC_SGTM_WEBHOOK_PLUGIN_URL')) {
+    define('WC_SGTM_WEBHOOK_PLUGIN_URL', plugin_dir_url(__FILE__));
+}
+if (!defined('WC_SGTM_WEBHOOK_PLUGIN_PATH')) {
+    define('WC_SGTM_WEBHOOK_PLUGIN_PATH', plugin_dir_path(__FILE__));
+}
+if (!defined('WC_SGTM_WEBHOOK_PLUGIN_BASENAME')) {
+    define('WC_SGTM_WEBHOOK_PLUGIN_BASENAME', plugin_basename(__FILE__));
+}
 
 /**
  * ========================================
@@ -313,7 +321,10 @@ class WC_SGTM_Webhook_Pro {
         wp_clear_scheduled_hook('wc_sgtm_webhook_cleanup');
         wp_clear_scheduled_hook('wc_sgtm_webhook_report');
         wp_clear_scheduled_hook('wc_sgtm_webhook_retry_failed');
-        
+        // Limpar eventos cron adicionais definidos em helpers
+        wp_clear_scheduled_hook('wc_sgtm_weekly_report');
+        wp_clear_scheduled_hook('wc_sgtm_cleanup_logs');
+
         // Log de desativação
         if ($this->logger) {
             $this->logger->info('Plugin desativado');

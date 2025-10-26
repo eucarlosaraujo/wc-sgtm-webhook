@@ -226,18 +226,20 @@ class WC_SGTM_Admin_Panel {
      * AJAX: Testar webhook
      */
     public function ajax_test_webhook() {
-        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'wc_sgtm_admin') || 
-            !current_user_can('manage_woocommerce')) {
-            wp_die('Acesso negado');
+        if (
+            !isset($_POST['nonce']) ||
+            !wp_verify_nonce($_POST['nonce'], 'wc_sgtm_admin') ||
+            !current_user_can('manage_woocommerce')
+        ) {
+            wp_send_json_error(array('message' => 'Acesso negado'), 403);
         }
         
         $webhook_sender = $this->plugin->get_webhook_sender();
         
         if (!$webhook_sender) {
-            wp_die(json_encode(array(
-                'success' => false,
+            wp_send_json_error(array(
                 'message' => 'Webhook sender não disponível'
-            )));
+            ), 500);
         }
         
         // Dados de teste
@@ -269,32 +271,26 @@ class WC_SGTM_Admin_Panel {
         
         try {
             $response = $webhook_sender->send_webhook($test_data);
-            
             if ($response['success']) {
-                wp_die(json_encode(array(
-                    'success' => true,
+                wp_send_json_success(array(
                     'message' => 'Teste enviado com sucesso!',
                     'response_code' => $response['response_code'],
                     'data' => $test_data
-                )));
+                ));
             } else {
-                wp_die(json_encode(array(
-                    'success' => false,
+                wp_send_json_error(array(
                     'message' => $response['error'],
                     'response_code' => $response['response_code'] ?? 0
-                )));
+                ), 500);
             }
-            
         } catch (Exception $e) {
             $this->logger->error('Erro no teste de webhook via admin', array(
                 'error' => $e->getMessage(),
                 'user_id' => get_current_user_id()
             ));
-            
-            wp_die(json_encode(array(
-                'success' => false,
+            wp_send_json_error(array(
                 'message' => 'Erro interno: ' . $e->getMessage()
-            )));
+            ), 500);
         }
     }
     
@@ -321,9 +317,12 @@ class WC_SGTM_Admin_Panel {
      * AJAX: Exportar logs
      */
     public function ajax_export_logs() {
-        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'wc_sgtm_admin') || 
-            !current_user_can('manage_woocommerce')) {
-            wp_die('Acesso negado');
+        if (
+            !isset($_POST['nonce']) ||
+            !wp_verify_nonce($_POST['nonce'], 'wc_sgtm_admin') ||
+            !current_user_can('manage_woocommerce')
+        ) {
+            wp_send_json_error(array('message' => 'Acesso negado'), 403);
         }
         
         $logs = $this->get_recent_logs(1000);
