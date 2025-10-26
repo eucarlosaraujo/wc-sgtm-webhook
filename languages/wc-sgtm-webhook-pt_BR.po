@@ -1,0 +1,96 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: WooCommerce SGTM Webhook 1.0.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/wc-sgtm-webhook\n"
+"POT-Creation-Date: 2023-10-26T12:00:00+00:00\n"
+"PO-Revision-Date: 2023-10-26T12:00:00+00:00\n"
+"Last-Translator: \n"
+"Language-Team: Português do Brasil\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"X-Generator: WP-CLI 2.7.1\n"
+"X-Domain: wc-sgtm-webhook\n"
+
+#: admin/class-wc-sgtm-webhook-admin.php:47
+#: admin/class-wc-sgtm-webhook-admin.php:48
+msgid "SGTM Webhook"
+msgstr "SGTM Webhook"
+
+#: admin/class-wc-sgtm-webhook-admin.php:83
+msgid "Configurações do SGTM Webhook"
+msgstr "Configurações do SGTM Webhook"
+
+#: admin/class-wc-sgtm-webhook-admin.php:90
+msgid "URL do Endpoint SGTM"
+msgstr "URL do Endpoint SGTM"
+
+#: admin/class-wc-sgtm-webhook-admin.php:99
+msgid "Chave de Autenticação"
+msgstr "Chave de Autenticação"
+
+#: admin/class-wc-sgtm-webhook-admin.php:108
+msgid "Eventos para Monitorar"
+msgstr "Eventos para Monitorar"
+
+#: admin/class-wc-sgtm-webhook-admin.php:117
+msgid "Modo de Depuração"
+msgstr "Modo de Depuração"
+
+#: admin/class-wc-sgtm-webhook-admin.php:150
+msgid "Configure a integração do WooCommerce com o Server-Side Google Tag Manager."
+msgstr "Configure a integração do WooCommerce com o Server-Side Google Tag Manager."
+
+#: admin/class-wc-sgtm-webhook-admin.php:159
+msgid "URL do endpoint do Server-Side GTM para onde os dados serão enviados."
+msgstr "URL do endpoint do Server-Side GTM para onde os dados serão enviados."
+
+#: admin/class-wc-sgtm-webhook-admin.php:168
+msgid "Chave de autenticação para o endpoint SGTM (opcional)."
+msgstr "Chave de autenticação para o endpoint SGTM (opcional)."
+
+#: admin/class-wc-sgtm-webhook-admin.php:190
+msgid "Ativar modo de depuração"
+msgstr "Ativar modo de depuração"
+
+#: admin/class-wc-sgtm-webhook-admin.php:191
+msgid "Registra informações adicionais no log do WordPress para depuração."
+msgstr "Registra informações adicionais no log do WordPress para depuração."
+
+#: admin/class-wc-sgtm-webhook-admin.php:202
+msgid "Novo Pedido"
+msgstr "Novo Pedido"
+
+#: admin/class-wc-sgtm-webhook-admin.php:203
+msgid "Mudança de Status do Pedido"
+msgstr "Mudança de Status do Pedido"
+
+#: admin/class-wc-sgtm-webhook-admin.php:204
+msgid "Pagamento Concluído"
+msgstr "Pagamento Concluído"
+
+#: admin/class-wc-sgtm-webhook-admin.php:205
+msgid "Adicionar ao Carrinho"
+msgstr "Adicionar ao Carrinho"
+
+#: admin/class-wc-sgtm-webhook-admin.php:206
+msgid "Remover do Carrinho"
+msgstr "Remover do Carrinho"
+
+#: admin/class-wc-sgtm-webhook-admin.php:207
+msgid "Atualização do Checkout"
+msgstr "Atualização do Checkout"
+
+#: admin/class-wc-sgtm-webhook-admin.php:221
+msgid "Configurações do WooCommerce SGTM Webhook"
+msgstr "Configurações do WooCommerce SGTM Webhook"
+
+#: admin/class-wc-sgtm-webhook-admin.php:242
+msgid "Configurações"
+msgstr "Configurações"
+
+#: wc-sgtm-webhook.php:83
+msgid "O plugin %1$s requer o WooCommerce para funcionar. Por favor, instale e ative o %2$s primeiro."
+msgstr "O plugin %1$s requer o WooCommerce para funcionar. Por favor, instale e ative o %2$s primeiro."

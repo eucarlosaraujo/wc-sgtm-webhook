@@ -1,0 +1,55 @@
+/**
+ * Estilos para o painel administrativo do WooCommerce SGTM Webhook
+ */
+
+.wc-sgtm-webhook-settings {
+    max-width: 800px;
+}
+
+.wc-sgtm-webhook-settings .form-table th {
+    width: 250px;
+}
+
+.wc-sgtm-webhook-settings .form-table td {
+    vertical-align: top;
+    padding-top: 15px;
+}
+
+.wc-sgtm-webhook-settings .description {
+    font-style: italic;
+    color: #666;
+    margin-top: 5px;
+}
+
+.wc-sgtm-webhook-settings input[type="text"],
+.wc-sgtm-webhook-settings input[type="url"] {
+    width: 100%;
+}
+
+.wc-sgtm-webhook-settings .events-list label {
+    display: block;
+    margin-bottom: 8px;
+}
+
+.wc-sgtm-webhook-settings .events-list input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+.wc-sgtm-webhook-status {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f8f8f8;
+    border-left: 4px solid #46b450;
+}
+
+.wc-sgtm-webhook-status.error {
+    border-left-color: #dc3232;
+}
+
+.wc-sgtm-webhook-status.warning {
+    border-left-color: #ffb900;
+}
+
+.wc-sgtm-webhook-status h3 {
+    margin-top: 0;
+}
