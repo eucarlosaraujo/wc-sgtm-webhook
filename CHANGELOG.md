@@ -5,6 +5,34 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [3.1.0] - 2025-11-04
+### ✅ Adicionado
+
+- Captura automática de User Agent no checkout
+- Função guess_gender() para inferir gênero pelo primeiro nome
+- Busca de categoria de produtos via WooCommerce API
+
+### ✅ Alterado
+
+- **user_data**: Todos os campos agora em formato Meta Ads (lowercase, sem hash)
+- user_data.ph: Adiciona prefixo "55" automaticamente se ausente
+- user_data.fn: Retorna apenas primeiro nome
+- user_data.ln: Retorna apenas último sobrenome
+- user_data.ct: Remove acentos e espaços da cidade
+- user_data.zp: Retorna apenas 5 primeiros dígitos
+- user_data.client_ip_address: Busca do pedido WooCommerce
+- user_data.client_user_agent: Busca do meta _customer_user_agent
+- **custom_data.content_type**: Fixo como "product_group"
+- custom_data.contents: Agora inclui campo category para cada produto
+- custom_data.transaction_id: Convertido para string
+- custom_data.num_items: Soma total de quantidades dos itens
+
+### 🔄 Melhorado
+
+Função normalize_city() otimizada para UTF-8
+Compatibilidade total com Meta Conversions API
+Event Match Quality aprimorado
+
 ## [3.0.0] - 2024-10-30
 
 ### 🎉 Lançamento Inicial

@@ -1,9 +1,9 @@
 <?php
 /**
- * Core webhook functionality
+ * Core webhook functionality - Meta Ads Format
  *
  * @package WC_SGTM_Webhook
- * @version 3.0.0
+ * @version 3.1.0
  */
 
 if (!defined('ABSPATH')) exit;
@@ -29,11 +29,23 @@ class WC_SGTM_Core {
         add_action('woocommerce_order_status_processing', array($this, 'send_webhook'), 10, 1);
         add_action('woocommerce_payment_complete', array($this, 'send_webhook'), 10, 1);
         
+        // Capture user agent at checkout
+        add_action('woocommerce_checkout_create_order', array($this, 'save_customer_user_agent'), 10, 2);
+        
         // Log rotation (daily)
         if (!wp_next_scheduled('wc_sgtm_clear_old_logs')) {
             wp_schedule_event(time(), 'daily', 'wc_sgtm_clear_old_logs');
         }
         add_action('wc_sgtm_clear_old_logs', array('WC_SGTM_Helpers', 'clear_old_logs'));
+    }
+    
+    /**
+     * Save customer user agent when order is created
+     */
+    public function save_customer_user_agent($order, $data) {
+        if (!empty($_SERVER['HTTP_USER_AGENT'])) {
+            $order->update_meta_data('_customer_user_agent', sanitize_text_field($_SERVER['HTTP_USER_AGENT']));
+        }
     }
     
     /**
@@ -72,8 +84,8 @@ class WC_SGTM_Core {
                 return;
             }
             
-            // Prepare order data
-            $order_data = $this->prepare_order_data($order);
+            // Prepare order data in Meta Ads format
+            $order_data = $this->prepare_order_data_metaads($order);
             
             if (empty($order_data)) {
                 WC_SGTM_Helpers::log_error('Erro ao preparar dados do pedido ' . $order_id);
@@ -100,145 +112,163 @@ class WC_SGTM_Core {
     }
     
     /**
-     * Prepare order data payload
+     * Prepare order data in Meta Ads format
      */
-    private function prepare_order_data($order) {
+    private function prepare_order_data_metaads($order) {
         if (!$order) {
             return false;
         }
         
-        $order_id = $order->get_id();
-        
         return array(
-            'client_name' => 'Data Client',
-            'event_name' => 'purchase',
+            'event_name' => 'Purchase', // PascalCase
             'event_time' => $order->get_date_created()->getTimestamp(),
-            'event_id' => 'wc_' . $order_id . '_' . time(),
             'action_source' => 'website',
             'event_source_url' => $order->get_checkout_order_received_url(),
-            'user_data' => $this->prepare_user_data($order),
-            'custom_data' => $this->prepare_custom_data($order),
-            'metadata' => array(
-                'source' => 'woocommerce',
-                'plugin_version' => WC_SGTM_VERSION,
-                'site_url' => get_site_url(),
-                'order_status' => $order->get_status(),
-                'payment_method' => $order->get_payment_method_title(),
-                'order_date' => $order->get_date_created()->format('c')
-            )
+            'user_data' => $this->prepare_user_data_metaads($order),
+            'custom_data' => $this->prepare_custom_data_metaads($order)
         );
     }
     
     /**
-     * Prepare user data (with hashing for PII)
+     * Prepare user data in Meta Ads format
      */
-    private function prepare_user_data($order) {
+    private function prepare_user_data_metaads($order) {
         $user_data = array();
         
-        // Email (hashed and plain)
+        // Email - lowercase
         if ($email = $order->get_billing_email()) {
-            $clean_email = strtolower(trim($email));
-            $user_data['em'] = array(WC_SGTM_Helpers::hash_pii($clean_email));
-            $user_data['email_address'] = $clean_email;
+            $user_data['em'] = strtolower(trim($email));
         }
         
-        // Phone (hashed and plain)
+        // Phone - adicionar 55 se não existir
         if ($phone = $order->get_billing_phone()) {
-            $clean_phone = WC_SGTM_Helpers::format_phone($phone);
+            $clean_phone = preg_replace('/[^0-9]/', '', $phone);
             if (strlen($clean_phone) >= 10) {
-                $user_data['ph'] = array(WC_SGTM_Helpers::hash_pii($clean_phone));
-                $user_data['phone_number'] = $clean_phone;
+                // Adicionar 55 se não começar com ele
+                if (!preg_match('/^55/', $clean_phone)) {
+                    $clean_phone = '55' . $clean_phone;
+                }
+                $user_data['ph'] = $clean_phone;
             }
         }
         
-        // First name
+        // First name - apenas primeiro nome, lowercase
         if ($first_name = $order->get_billing_first_name()) {
-            $user_data['fn'] = array(WC_SGTM_Helpers::hash_pii($first_name));
-            $user_data['first_name'] = trim($first_name);
+            $names = explode(' ', trim($first_name));
+            $user_data['fn'] = strtolower($names[0]);
         }
         
-        // Last name
+        // Last name - apenas último nome, lowercase
         if ($last_name = $order->get_billing_last_name()) {
-            $user_data['ln'] = array(WC_SGTM_Helpers::hash_pii($last_name));
-            $user_data['last_name'] = trim($last_name);
+            $names = explode(' ', trim($last_name));
+            $user_data['ln'] = strtolower(end($names));
         }
         
-        // City
+        // City - sem espaços, sem acentos, lowercase
         if ($city = $order->get_billing_city()) {
-            $user_data['ct'] = array(WC_SGTM_Helpers::hash_pii($city));
-            $user_data['city'] = trim($city);
+            $user_data['ct'] = $this->normalize_city($city);
         }
         
-        // State
+        // State - lowercase
         if ($state = $order->get_billing_state()) {
-            $user_data['st'] = array(WC_SGTM_Helpers::hash_pii($state));
-            $user_data['state'] = trim($state);
+            $user_data['st'] = strtolower(trim($state));
         }
         
-        // ZIP code
-        if ($postcode = $order->get_billing_postcode()) {
-            $clean_zip = WC_SGTM_Helpers::format_zip($postcode);
-            if (strlen($clean_zip) === 8) {
-                $user_data['zp'] = array(WC_SGTM_Helpers::hash_pii($clean_zip));
-                $user_data['zip_code'] = $clean_zip;
-            }
-        }
-        
-        // Country
+        // Country - lowercase
         if ($country = $order->get_billing_country()) {
-            $user_data['country'] = array(WC_SGTM_Helpers::hash_pii($country));
-            $user_data['country_code'] = trim($country);
+            $user_data['country'] = strtolower(trim($country));
         }
         
-        // External ID (user ID if logged in)
-        if ($user_id = $order->get_user_id()) {
-            $user_data['external_id'] = array(WC_SGTM_Helpers::hash_pii(strval($user_id)));
-            $user_data['user_id'] = intval($user_id);
-            
-            $user = get_user_by('ID', $user_id);
-            if ($user) {
-                $user_data['username'] = $user->user_login;
-                $user_data['user_registered'] = $user->user_registered;
-            }
+        // ZIP - apenas 5 primeiros dígitos
+        if ($postcode = $order->get_billing_postcode()) {
+            $clean_zip = preg_replace('/[^0-9]/', '', $postcode);
+            $user_data['zp'] = substr($clean_zip, 0, 5);
         }
         
-        // Customer type
-        $user_data['user_type'] = $user_id ? 'registered' : 'guest';
+        // Gender - padrão "m"
+        $user_data['ge'] = $this->guess_gender($order->get_billing_first_name());
         
-        // Company (if provided)
-        $user_data['billing_company'] = $order->get_billing_company() ?: '';
+        // Client IP Address - do WooCommerce order
+        $user_data['client_ip_address'] = $order->get_customer_ip_address() ?: '';
+        
+        // Client User Agent - do meta do pedido
+        $user_data['client_user_agent'] = $order->get_meta('_customer_user_agent', true) ?: '';
         
         return array_filter($user_data);
     }
     
     /**
-     * Prepare custom data (order details)
+     * Normalize city name (remove accents, spaces, lowercase)
      */
-    private function prepare_custom_data($order) {
-        $custom_data = array(
-            'currency' => $order->get_currency(),
-            'value' => floatval($order->get_total()),
-            'order_id' => strval($order->get_id()),
-            'num_items' => intval($order->get_item_count()),
-            'content_type' => 'product',
-            'content_ids' => array(),
-            'content_names' => array(),
-            'content_category' => array(),
-            'contents' => array(),
-            'subtotal' => floatval($order->get_subtotal()),
-            'tax' => floatval($order->get_total_tax()),
-            'shipping' => floatval($order->get_shipping_total()),
-            'discount' => floatval($order->get_discount_total()),
-            'order_key' => $order->get_order_key()
-        );
+    private function normalize_city($city_name) {
+        $result = '';
+        $length = mb_strlen($city_name, 'UTF-8');
         
-        // Coupons
-        $coupons = $order->get_coupon_codes();
-        if (!empty($coupons)) {
-            $custom_data['coupon'] = implode(', ', $coupons);
+        for ($i = 0; $i < $length; $i++) {
+            $current = mb_substr($city_name, $i, 1, 'UTF-8');
+            $next = ($i + 1 < $length) ? mb_substr($city_name, $i + 1, 1, 'UTF-8') : '';
+            $pair = $current . $next;
+            
+            // Mapa de substituições para acentos UTF-8
+            if ($pair === 'ã' || $pair === 'á' || $pair === 'à' || $pair === 'â') {
+                $result .= 'a';
+                $i++;
+            } elseif ($pair === 'é' || $pair === 'ê') {
+                $result .= 'e';
+                $i++;
+            } elseif ($pair === 'í') {
+                $result .= 'i';
+                $i++;
+            } elseif ($pair === 'ó' || $pair === 'ô' || $pair === 'õ') {
+                $result .= 'o';
+                $i++;
+            } elseif ($pair === 'ú' || $pair === 'ü') {
+                $result .= 'u';
+                $i++;
+            } elseif ($pair === 'ç') {
+                $result .= 'c';
+                $i++;
+            } elseif ($current !== ' ') {
+                // Não é espaço, adiciona normalmente
+                $result .= $current;
+            }
+            // Se for espaço, não adiciona nada (remove)
         }
         
-        // Process order items
+        return strtolower($result);
+    }
+    
+    /**
+     * Guess gender from first name (default: "m")
+     */
+    private function guess_gender($first_name) {
+        if (empty($first_name)) {
+            return 'm';
+        }
+        
+        // Lista de nomes femininos comuns
+        $female_names = array(
+            'maria', 'ana', 'julia', 'juliana', 'fernanda', 'patricia',
+            'carla', 'mariana', 'camila', 'amanda', 'jessica', 'bruna',
+            'leticia', 'rafaela', 'gabriela', 'adriana', 'luciana', 'renata',
+            'paula', 'sandra', 'monica', 'daniela', 'vanessa', 'tatiana'
+        );
+        
+        $name_lower = strtolower(trim($first_name));
+        $first_word = explode(' ', $name_lower)[0];
+        
+        return in_array($first_word, $female_names) ? 'f' : 'm';
+    }
+    
+    /**
+     * Prepare custom data in Meta Ads format
+     */
+    private function prepare_custom_data_metaads($order) {
+        $contents = array();
+        $content_names = array();
+        $total_items = 0;
+        
+        // Processar itens do pedido
         foreach ($order->get_items() as $item) {
             $product = $item->get_product();
             
@@ -248,64 +278,50 @@ class WC_SGTM_Core {
             $quantity = intval($item->get_quantity());
             $price = floatval($order->get_item_subtotal($item, false, false));
             
-            // Product IDs
-            $custom_data['content_ids'][] = strval($product_id);
+            // Buscar categoria do produto
+            $category = $this->get_product_category($product_id);
             
-            // Product names
-            $custom_data['content_names'][] = $product->get_name();
-            
-            // Categories
-            $categories = wp_get_post_terms($product_id, 'product_cat', array('fields' => 'names'));
-            $category_name = !empty($categories) ? $categories[0] : '';
-            if (!empty($category_name)) {
-                $custom_data['content_category'][] = $category_name;
-            }
-            
-            // Detailed item data
-            $custom_data['contents'][] = array(
+            // Adicionar ao contents
+            $contents[] = array(
                 'id' => strval($product_id),
-                'name' => $product->get_name(),
-                'category' => $category_name,
+                'title' => $product->get_name(),
                 'quantity' => $quantity,
                 'item_price' => $price,
-                'brand' => $this->get_product_brand($product),
-                'sku' => $product->get_sku() ?: strval($product_id)
+                'category' => $category
             );
+            
+            // Adicionar nome ao content_name
+            $content_names[] = $product->get_name();
+            
+            // Somar quantidade
+            $total_items += $quantity;
         }
         
-        // Ensure unique categories
-        $custom_data['content_category'] = array_unique(array_filter($custom_data['content_category']));
+        $custom_data = array(
+            'content_type' => 'product_group', // Fixo
+            'content_ids' => wp_list_pluck($contents, 'id'),
+            'contents' => $contents,
+            'content_name' => implode(', ', $content_names),
+            'value' => floatval($order->get_total()),
+            'currency' => 'BRL',
+            'transaction_id' => strval($order->get_id()), // String
+            'num_items' => $total_items // Soma das quantidades
+        );
         
         return $custom_data;
     }
     
     /**
-     * Get product brand from various sources
+     * Get product category from WooCommerce
      */
-    private function get_product_brand($product) {
-        $brand = '';
+    private function get_product_category($product_id) {
+        $categories = wp_get_post_terms($product_id, 'product_cat', array('fields' => 'names'));
         
-        // Check for brand attribute
-        if (method_exists($product, 'get_attribute')) {
-            $brand = $product->get_attribute('pa_marca');
-            if (empty($brand)) {
-                $brand = $product->get_attribute('marca');
-            }
+        if (!empty($categories) && !is_wp_error($categories)) {
+            return $categories[0]; // Primeira categoria
         }
         
-        // Check for brand taxonomy
-        if (empty($brand) && $product->get_id()) {
-            $taxonomies = array('product_brand', 'pa_brand', 'yith_product_brand');
-            foreach ($taxonomies as $tax) {
-                $terms = wp_get_post_terms($product->get_id(), $tax, array('fields' => 'names'));
-                if (!empty($terms) && !is_wp_error($terms)) {
-                    $brand = $terms[0];
-                    break;
-                }
-            }
-        }
-        
-        return $brand ?: '';
+        return '';
     }
     
     /**
@@ -338,6 +354,7 @@ class WC_SGTM_Core {
         if (WC_SGTM_Helpers::is_debug_mode()) {
             WC_SGTM_Helpers::log_debug('Enviando POST para: ' . $endpoint);
             WC_SGTM_Helpers::log_debug('Tamanho payload: ' . strlen($args['body']) . ' bytes');
+            WC_SGTM_Helpers::log_debug('Payload: ' . $args['body']);
         }
         
         return wp_remote_post($endpoint, $args);
