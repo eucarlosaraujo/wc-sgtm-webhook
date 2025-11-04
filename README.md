@@ -1,155 +1,280 @@
-# WooCommerce SGTM Webhook
+# 🚀 WC SGTM Webhook Pro
 
-[![WordPress Plugin Version](https://img.shields.io/wordpress/plugin/v/wc-sgtm-webhook.svg)](https://wordpress.org/plugins/wc-sgtm-webhook/)
-[![WordPress Plugin Downloads](https://img.shields.io/wordpress/plugin/dt/wc-sgtm-webhook.svg)](https://wordpress.org/plugins/wc-sgtm-webhook/)
-[![WordPress Plugin Rating](https://img.shields.io/wordpress/plugin/r/wc-sgtm-webhook.svg)](https://wordpress.org/plugins/wc-sgtm-webhook/)
-[![License](https://img.shields.io/badge/license-GPL--2.0%2B-red.svg)](https://github.com/seu-usuario/wc-sgtm-webhook/blob/main/LICENSE)
+![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)
+![WordPress](https://img.shields.io/badge/WordPress-6.0%2B-blue.svg)
+![WooCommerce](https://img.shields.io/badge/WooCommerce-7.0%2B-purple.svg)
+![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)
+![License](https://img.shields.io/badge/license-GPL%20v3-green.svg)
 
-Integração profissional do WooCommerce com Server-Side Google Tag Manager via webhooks para rastreamento avançado de e-commerce.
+Plugin profissional para integrar **WooCommerce** com **Server-Side Google Tag Manager (SGTM)** via Data Client, otimizado para **Meta Conversions API** com alta **Event Match Quality (EMQ)**.
 
-## 📋 Descrição
+---
 
-O **WooCommerce SGTM Webhook** fornece uma integração robusta entre o WooCommerce e o Server-Side Google Tag Manager (SGTM), permitindo o rastreamento preciso de eventos de e-commerce através de webhooks em tempo real.
+## ✨ Funcionalidades
 
-### 🚀 Principais Recursos
+- ✅ **Envio automático** de eventos `purchase` para SGTM
+- ✅ **Suporte completo** a Stape.io e Self-Hosted SGTM
+- ✅ **EMQ ≥ 8/10** - Event Match Quality otimizado
+- ✅ **Hash SHA-256** automático de dados pessoais (LGPD compliant)
+- ✅ **Dashboard administrativo** com estatísticas em tempo real
+- ✅ **Sistema de logs** com rotação automática
+- ✅ **Reenvio manual** de webhooks
+- ✅ **Teste de conexão** integrado
+- ✅ **Bearer Token** para autenticação opcional
 
-- ✅ **Envio em tempo real** de eventos para SGTM
-- 📊 **Rastreamento completo** de pedidos e status
-- 🛒 **Monitoramento do carrinho** (adicionar/remover produtos)
-- 💳 **Acompanhamento do checkout** e pagamentos
-- 🔧 **Configuração simples** via painel administrativo
-- 🔒 **Suporte a autenticação** para endpoints seguros
-- 🐛 **Modo de depuração** para solução de problemas
-- 📈 **Dashboard com estatísticas** detalhadas
-- 🔄 **Sistema de retry** para falhas temporárias
+---
 
-### 📊 Eventos Rastreados
+## 📊 Dados Enviados (Match Keys)
 
-- **Novo Pedido** - Quando um pedido é criado
-- **Status do Pedido** - Mudanças de status (pendente → processando → concluído)
-- **Pagamento Concluído** - Confirmação de pagamentos
-- **Adicionar ao Carrinho** - Produtos adicionados
-- **Remover do Carrinho** - Produtos removidos
-- **Checkout Iniciado** - Início do processo de checkout
+### Alta Prioridade
+- `em` (email) - hasheado + plain
+- `ph` (phone) - hasheado + plain
+- `fn` (first name) - hasheado + plain
+- `ln` (last name) - hasheado + plain
 
-### 🎯 Benefícios do Server-Side Tracking
+### Média/Baixa Prioridade
+- `ct` (city)
+- `st` (state)
+- `zp` (zip code)
+- `country` (country code)
+- `external_id` (user ID)
+- `fbp` / `fbc` (se disponíveis)
 
-- 📈 **Maior precisão** nos dados coletados
-- 🚫 **Não afetado** por bloqueadores de anúncios
-- ⚡ **Melhor performance** para o usuário
-- 🔐 **Conformidade** com regulamentos de privacidade
-- 📊 **Dados consistentes** para análise
+### Custom Data
+- Valor total, moeda, ID do pedido
+- Itens do pedido (nome, quantidade, preço)
+- Categorias, marcas, SKUs
+- Subtotal, impostos, frete, descontos
+- Cupons aplicados
 
-## 🛠️ Instalação
+---
+
+## 📦 Instalação
 
 ### Via WordPress Admin
 
-1. Acesse **Plugins → Adicionar Novo**
-2. Pesquise por "WooCommerce SGTM Webhook"
-3. Clique em **Instalar Agora**
-4. **Ative** o plugin
-
-### Via Upload Manual
-
-1. Baixe o arquivo `.zip` do plugin
-2. Acesse **Plugins → Adicionar Novo → Enviar Plugin**
-3. Selecione o arquivo e clique em **Instalar Agora**
-4. **Ative** o plugin
+1. Baixe o arquivo `wc-sgtm-webhook.zip`
+2. Vá para **Plugins > Adicionar Novo > Enviar Plugin**
+3. Selecione o arquivo ZIP
+4. Clique em **Instalar Agora** e depois **Ativar**
 
 ### Via FTP
 
-1. Extraia o arquivo `.zip`
+1. Extraia o arquivo ZIP
 2. Envie a pasta `wc-sgtm-webhook` para `/wp-content/plugins/`
-3. Ative o plugin no painel administrativo
+3. Ative o plugin em **Plugins > Plugins Instalados**
+
+### Via WP-CLI
+
+```bash
+wp plugin install wc-sgtm-webhook.zip --activate
+```
+
+---
 
 ## ⚙️ Configuração
 
-1. Acesse **WooCommerce → SGTM Webhook**
-2. Configure a **URL do Webhook** do seu servidor SGTM
-3. Ative o **Envio de Webhooks**
-4. Configure as opções avançadas conforme necessário
-5. Teste a conexão usando o botão **Testar Webhook**
+### 1. Acesse as Configurações
 
-### Configurações Principais
+Vá para **WooCommerce > SGTM Webhook**
 
-- **URL do Webhook**: Endpoint do seu servidor SGTM
-- **Timeout**: Tempo limite para requisições (padrão: 30s)
-- **Tentativas**: Número de tentativas em caso de falha (padrão: 3)
-- **Validar SSL**: Verificação de certificados SSL
-- **Modo Debug**: Logs detalhados para depuração
+### 2. Preencha os Campos
+
+Na aba **Configurações**:
+
+| Campo | Descrição | Exemplo |
+|-------|-----------|---------|
+| **URL do Webhook** | URL base do servidor SGTM | `https://sgtm.seudominio.com` |
+| **Container ID** | ID do container GTM Server-Side | `GTM-XXXXXXX` |
+| **Token** (opcional) | Bearer token para autenticação | `seu_token_secreto` |
+| **Ativar Webhook** | Checkbox para ativar envio | ✅ Marcado |
+| **Modo Debug** | Ativar logs detalhados | ⚠️ Apenas para testes |
+
+### 3. Teste a Conexão
+
+1. Vá para a aba **Ferramentas**
+2. Clique em **🧪 Testar Conexão**
+3. Verifique se retorna **HTTP 200** ou **405** (ambos são OK)
+
+### 4. Faça um Pedido de Teste
+
+1. Faça um pedido de teste no WooCommerce
+2. Vá para a aba **Pedidos**
+3. Verifique se o webhook foi enviado com sucesso (✅)
+4. Confirme no **SGTM Debug Mode** se o evento chegou
+
+---
+
+## 🔧 Endpoint Gerado
+
+O plugin constrói automaticamente o endpoint final:
+
+```
+https://sgtm.seudominio.com/data?id=GTM-XXXXXXX
+```
+
+- **Base URL**: configurada por você
+- **/data**: adicionado automaticamente
+- **?id=GTM-XXX**: construído com o Container ID
+
+---
 
 ## 📖 Uso
 
-Após a configuração, o plugin funcionará automaticamente:
+### Dashboard
 
-1. **Eventos são capturados** em tempo real
-2. **Dados são enviados** via webhook para o SGTM
-3. **Logs são registrados** para monitoramento
-4. **Estatísticas são atualizadas** no dashboard
+Visualize estatísticas em tempo real:
+- Status do webhook (ativo/inativo)
+- Envios de hoje
+- Total de envios
+- Modo debug
+- Último pedido enviado
 
-### Dashboard de Estatísticas
+### Pedidos
 
-Acesse **WooCommerce → SGTM Webhook → Dashboard** para ver:
+Lista dos últimos 20 pedidos com:
+- Data e status do pedido
+- Status do webhook (✅ Enviado / ❌ Erro / ⏳ Pendente)
+- Código de resposta HTTP
+- Botão **🔄 Reenviar** para tentar novamente
 
-- Total de webhooks enviados
-- Taxa de sucesso
-- Erros recentes
-- Performance por período
-- Logs detalhados
+### Ferramentas
 
-## 🔧 Requisitos
+- **🧪 Testar Conexão**: Envia um evento de teste
+- **🗑️ Limpar Logs**: Remove logs antigos
+- **📋 Ver Todos os Logs**: Acessa logs do WooCommerce
+- **📝 Logs Recentes**: Visualiza últimos 15 logs
 
-- **WordPress**: 5.6 ou superior
-- **WooCommerce**: 5.0 ou superior
-- **PHP**: 7.4 ou superior
-- **Servidor SGTM**: Configurado e funcionando
+---
+
+## 🔒 Segurança & Privacidade
+
+### LGPD Compliant
+
+✅ Todos os dados pessoais são hasheados com **SHA-256** antes do envio:
+- Email, telefone, nome, sobrenome
+- Cidade, estado, CEP, país
+- User ID
+
+### Transmissão Segura
+
+✅ Comunicação via **HTTPS** com SSL verify habilitado
+✅ Suporte a **Bearer Token** para autenticação
+✅ Validação de nonce em todas as ações admin
+✅ Sanitização de todos os inputs
+
+---
+
+## 🐛 Troubleshooting
+
+### Webhook não dispara
+
+1. Verifique se o webhook está **ativo** (checkbox marcado)
+2. Confirme se a URL está correta
+3. Teste a conexão na aba **Ferramentas**
+
+### Erro 404
+
+- A URL está incorreta ou o path `/data` não existe
+- Verifique se o servidor SGTM está rodando
+
+### Erro SSL
+
+- O certificado SSL do WordPress ou do SGTM está inválido
+- Temporariamente desabilite SSL verify (não recomendado)
+
+### Dados não chegam no Facebook
+
+1. Verifique se a tag `Purchase` está configurada no SGTM
+2. Confirme se o **Data Client** está recebendo os eventos
+3. Verifique o **Event Match Quality** no Meta Events Manager
+4. Confirme se o Pixel ID e Access Token estão corretos
+
+---
+
+## 📚 Estrutura de Arquivos
+
+```
+wc-sgtm-webhook/
+├── wc-sgtm-webhook.php          # Arquivo principal
+├── includes/
+│   ├── class-helpers.php         # Funções auxiliares
+│   ├── class-core.php            # Lógica de envio
+│   ├── class-admin.php           # Interface admin
+│   └── class-ajax.php            # Handlers AJAX
+├── assets/
+│   ├── css/
+│   │   └── admin.css             # Estilos admin
+│   └── js/
+│       └── admin.js              # Scripts admin
+├── languages/                    # Traduções (futuro)
+├── readme.txt                    # README WordPress.org
+├── CHANGELOG.md                  # Changelog
+└── README.md                     # Este arquivo
+```
+
+---
+
+## 🛣️ Roadmap
+
+### v3.1.0 (Q1 2025)
+- [ ] Suporte a HPOS (High-Performance Order Storage)
+- [ ] Eventos adicionais (ViewContent, AddToCart, InitiateCheckout)
+- [ ] Integração com ActionScheduler
+- [ ] Webhook personalizado por gateway
+
+### v3.2.0 (Q2 2025)
+- [ ] Suporte a múltiplos endpoints
+- [ ] Campos customizados configuráveis
+- [ ] Exportação de relatórios em PDF
+- [ ] Integração com Google Analytics 4
+
+---
 
 ## 🤝 Contribuindo
 
 Contribuições são bem-vindas! Para contribuir:
 
-1. **Fork** o repositório
-2. Crie uma **branch** para sua feature (`git checkout -b feature/nova-feature`)
-3. **Commit** suas mudanças (`git commit -am 'Adiciona nova feature'`)
-4. **Push** para a branch (`git push origin feature/nova-feature`)
-5. Abra um **Pull Request**
-
-### Desenvolvimento Local
-
-```bash
-# Clone o repositório
-git clone https://github.com/seu-usuario/wc-sgtm-webhook.git
-
-# Entre na pasta
-cd wc-sgtm-webhook
-
-# Instale em um ambiente WordPress local
-# (XAMPP, Local by Flywheel, etc.)
-```
-
-## 📝 Changelog
-
-### 1.0.0 (2024-01-XX)
-- 🎉 Lançamento inicial
-- ✅ Integração básica com SGTM
-- 📊 Dashboard de estatísticas
-- 🔧 Configurações avançadas
-- 🐛 Sistema de logs e debug
-
-## 🆘 Suporte
-
-- **Documentação**: [Wiki do GitHub](https://github.com/seu-usuario/wc-sgtm-webhook/wiki)
-- **Issues**: [GitHub Issues](https://github.com/seu-usuario/wc-sgtm-webhook/issues)
-- **Fórum WordPress**: [Plugin Support](https://wordpress.org/support/plugin/wc-sgtm-webhook/)
-
-## 📄 Licença
-
-Este plugin é licenciado sob a [GPL v2 ou posterior](https://www.gnu.org/licenses/gpl-2.0.html).
-
-## 🙏 Créditos
-
-Desenvolvido com ❤️ para a comunidade WordPress e WooCommerce.
+1. Faça um fork do projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/MinhaFeature`)
+3. Commit suas mudanças (`git commit -m 'Adiciona MinhaFeature'`)
+4. Push para a branch (`git push origin feature/MinhaFeature`)
+5. Abra um Pull Request
 
 ---
 
-**⭐ Se este plugin foi útil, considere deixar uma avaliação no [WordPress.org](https://wordpress.org/plugins/wc-sgtm-webhook/)!**
+## 📄 Licença
+
+Este projeto está licenciado sob a **GPL v3** - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+---
+
+## 👨‍💻 Autor
+
+**Carlos Araújo** - [Alta Cúpula / Elevelife](https://elevelife.com)
+
+---
+
+## 🙏 Agradecimentos
+
+- Equipe **Stape.io** pela infraestrutura SGTM
+- Comunidade **WooCommerce**
+- **Meta Developer Documentation**
+
+---
+
+## 📧 Suporte
+
+- Email: suporte@elevelife.com
+- GitHub Issues: [Criar issue](https://github.com/elevelife/wc-sgtm-webhook/issues)
+- Documentação: https://docs.elevelife.com/wc-sgtm-webhook
+
+---
+
+## ⭐ Se gostou, dê uma estrela!
+
+Se este plugin foi útil para você, considere dar uma ⭐ no GitHub!
+
+---
+
+**Desenvolvido com ❤️ para a comunidade WooCommerce**

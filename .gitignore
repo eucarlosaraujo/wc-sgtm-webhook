@@ -1,64 +1,40 @@
-# Plugin WooCommerce SGTM Webhook
-# Arquivos e diretórios específicos do projeto
+# WordPress
+wp-config.php
+wp-content/uploads/
+wp-content/upgrade/
+wp-content/backup-db/
+wp-content/advanced-cache.php
+wp-content/wp-cache-config.php
+wp-content/cache/
+*.log
 
-# Arquivos temporários do sistema
+# Plugin specific
 .DS_Store
 Thumbs.db
+*.swp
+*.bak
+*~
 
-# Arquivos de IDE e editores
+# IDE
 .idea/
 .vscode/
 *.sublime-project
 *.sublime-workspace
-*.code-workspace
 
-# Dependências e pacotes
+# Node
 node_modules/
+npm-debug.log
+yarn-error.log
+
+# Composer
 vendor/
 composer.lock
-package-lock.json
-yarn.lock
 
-# Arquivos de build e compilação
+# Build
 dist/
 build/
 *.zip
 
-# Arquivos de ambiente
+# Environment
 .env
-.env.*
-!.env.example
-
-# Mapas de fonte e minificados (assets)
-assets/**/*.map
-assets/**/*.min.*
-
-# Arquivos temporários
-tmp/
-temp/
-
-# Arquivos específicos do WordPress quando testando o plugin
-/wp-admin/
-/wp-content/index.php
-/wp-content/languages
-/wp-content/plugins/index.php
-/wp-content/themes/index.php
-/wp-includes/
-/index.php
-/license.txt
-/readme.html
-/wp-*.php
-/xmlrpc.php
-wp-config.php
-/wp-content/uploads/
-/.htaccess
-
-# Traduções (manter .po, ignorar binários .mo)
-languages/*.mo
-
-# Cobertura e relatórios de testes
-coverage/
-reports/
-.phpunit.result.cache
-*.log
-*.cache
+.env.local
