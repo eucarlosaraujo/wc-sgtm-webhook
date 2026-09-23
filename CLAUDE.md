@@ -7,7 +7,7 @@ Plugin WordPress/WooCommerce que envia dados de pedidos pagos para Server-Side G
 **Versão Atual:** 3.0.0  
 **Linguagem:** PHP 7.4+  
 **Framework:** WordPress 6.0+ / WooCommerce 7.0+  
-**Autor:** Carlos Araújo - Alta Cúpula / Elevelife
+**Autor:** Carlos Araújo - Alta Cúpula 
 
 ---
 
