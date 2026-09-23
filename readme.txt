@@ -179,11 +179,6 @@ Primeira versão estável do plugin. Recomendado para todos os usuários.
 
 == Suporte ==
 
-Para suporte técnico:
-* Email: suporte@elevelife.com
-* GitHub: https://github.com/elevelife/wc-sgtm-webhook
-* Documentação: https://docs.elevelife.com/wc-sgtm-webhook
-
 == Roadmap ==
 
 ### Versão 3.1 (Q1 2025)
