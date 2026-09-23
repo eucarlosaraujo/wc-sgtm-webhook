@@ -251,7 +251,7 @@ Este projeto está licenciado sob a **GPL v3** - veja o arquivo [LICENSE](LICENS
 
 ## 👨‍💻 Autor
 
-**Carlos Araújo** - [Alta Cúpula / Elevelife](https://elevelife.com)
+**Carlos Araújo** - [Alta Cúpula](https://ads.trafegonaveia.com.br)
 
 ---
 
@@ -265,9 +265,7 @@ Este projeto está licenciado sob a **GPL v3** - veja o arquivo [LICENSE](LICENS
 
 ## 📧 Suporte
 
-- Email: suporte@elevelife.com
-- GitHub Issues: [Criar issue](https://github.com/elevelife/wc-sgtm-webhook/issues)
-- Documentação: https://docs.elevelife.com/wc-sgtm-webhook
+- Email: suporte@trafegonaveia.com.br
 
 ---
 
