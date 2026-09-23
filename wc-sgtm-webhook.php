@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: WC SGTM Webhook Pro
- * Plugin URI: https://github.com/elevelife/wc-sgtm-webhook
+ * Plugin URI: https://github.com/eucarlosaraujo/wc-sgtm-webhook/
  * Description: Envia dados de pedidos pagos para Server-Side Google Tag Manager (Stape.io) via Data Client com Event Match Quality otimizado para Meta Ads.
  * Version: 3.0.0
- * Author: Carlos Araújo - Alta Cúpula / Elevelife
- * Author URI: https://elevelife.com
+ * Author: Carlos Araújo - Alta Cúpula 
+ * Author URI: https://ads.trafegonaveia.com.br
  * Text Domain: wc-sgtm-webhook
  * Domain Path: /languages
  * Requires at least: 6.0
