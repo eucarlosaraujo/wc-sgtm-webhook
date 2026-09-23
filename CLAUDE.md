@@ -196,10 +196,10 @@ wp post meta delete 12345 _sgtm_webhook_sent
 
 ## 📞 Contato
 
-**Suporte:** suporte@elevelife.com  
+**Suporte:** suporte@trafegonaveia.com.br
 **Desenvolvedor:** Carlos Araújo  
 **Empresa:** Alta Cúpula / Elevelife  
-**Site:** https://elevelife.com
+**Site:** https://ads.trafegonaveia.com.br
 
 ---
 
