@@ -198,7 +198,7 @@ wp post meta delete 12345 _sgtm_webhook_sent
 
 **Suporte:** suporte@trafegonaveia.com.br
 **Desenvolvedor:** Carlos Araújo  
-**Empresa:** Alta Cúpula / Elevelife  
+**Empresa:** Alta Cúpula
 **Site:** https://ads.trafegonaveia.com.br
 
 ---
